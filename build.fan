@@ -1,6 +1,6 @@
 #! /usr/bin/env fan
 
-// Copyright (C) 2021, Alliance for Sustainable Energy, LLC
+// Copyright (C) 2026, Alliance for Energy Innovation, LLC
 // All Rights Reserved
 
 using build
