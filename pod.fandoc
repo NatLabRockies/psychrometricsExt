@@ -6,11 +6,29 @@ The Pyschrometrics extension provides a set of functions for basic
 calculations implemented in Axon. Credit goes to Eric Kozubal for providing the
 Microsoft Excel VBA macros originally used to create this extension.
 
-The `psychSolver()` function is a flexible "one stop shop" for calculating most
-pyschrometric properties supported by this extension. (Thank you to James Donson
-for the inspiration for and initial implementation of this function.) Other,
-lower-level functions calculate specific properties of moist air, liquid water,
-and glycol-water mixtures. The functions are individually documented.
+For a change log, see the
+[psychrometricsExt]`https://github.com/NatLabRockies/psychrometricsExt`
+repository on GitHub.
 
-See also the [psychrometricsExt]`https://github.com/NREL/psychrometricsExt/`
-repository on GitHub for a change log.
+Usage Notes
+===========
+
+- The `psychSolver()` function is a flexible "one stop shop" for calculating
+  most pyschrometric properties supported by this extension. (Thank you to
+  James Donson for contributing the initial implementation of this function!)
+- Other functions calculate various properties of dry air, moist air, liquid
+  water, and glycol-water mixtures. The functions are individually documented.
+- Some function families support calculating the same output value given
+  different input states. For example, the functions `relativeHumidity()`,
+  `relativeHumidity2()`, and `relativeHumidity3()` all calculate relative
+  humidity but differ in their required inputs.
+  
+Units
+=====
+
+- Function inputs may be in any valid units for the input quantity (as defined
+  by the Haystack units database). Inputs are converted to standard SI units
+  within each function.
+- With the exception of `psychSolver()`, function outputs are always in standard
+  SI units. (`psychSolver()` allows the user to specify either SI or IP units
+  via the 'outputUnits' option.)
