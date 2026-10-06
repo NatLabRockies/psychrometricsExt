@@ -2050,6 +2050,19 @@ src:
     standardPressure(elev)
   end
 ---
+name:stdTemp
+func
+nodoc
+psychrometrics
+src:
+  (elev:0m) => do
+    logWarn(
+      {name:"pyschrometrics", funcTrace:"stdTemp"},
+      "stdTemp() is deprecated; use standardTemp() instead."
+    )
+    standardTemp(elev)
+  end
+---
 name:waterDensity
 doc:
   Approximates the density of pure liquid water as a function of temperature. Models are
