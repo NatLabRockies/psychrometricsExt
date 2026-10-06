@@ -547,7 +547,8 @@ src:
       if (outputProps.size != userOutputProps.size) do
         unsupportedProps: userOutputProps.findAll(v => not outputProps.contains(v))
         logWarn(
-          "pyschrometrics", "Ignoring unsupported glycol-water blend properties(s) " +
+          {name:"pyschrometrics", funcTrace:"glycolWaterBlendProps"},
+          "Ignoring unsupported glycol-water blend properties(s) " +
           unsupportedProps.map(v => "\"" + v + "\"").concat(", ") + "."
         )
       end
@@ -1362,7 +1363,8 @@ src:
       if (outputStates.size != userOutputStates.size) do
         unsupportedStates: userOutputStates.findAll(v => not outputStates.contains(v))
         logWarn(
-          "pyschrometrics", "Ignoring unsupported output state(s) " +
+          {name:"pyschrometrics", funcTrace:"psychSolver"},
+          "Ignoring unsupported output state(s) " +
           unsupportedStates.map(v => "\"" + v + "\"").concat(", ") + "."
         )
       end
@@ -2041,7 +2043,10 @@ nodoc
 psychrometrics
 src:
   (elev:0m) => do
-    logWarn("pyschrometrics", "stdPressure() is deprecated; use standardPressure() instead.")
+    logWarn(
+      {name:"pyschrometrics", funcTrace:"stdPressure"},
+      "stdPressure() is deprecated; use standardPressure() instead."
+    )
     standardPressure(elev)
   end
 ---
@@ -2230,7 +2235,7 @@ src:
           "w: "       + w1.toStr      + ", " +
           "wTarget: " + wTarget.toStr + ", " + 
           "error: "   + (wTarget - w1).toStr
-        logDebug("psychrometrics", debugStr)
+        logDebug({name:"pyschrometrics", funcTrace:"wetBulb"}, debugStr)
       end
   
       // Check convergence
