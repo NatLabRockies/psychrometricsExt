@@ -10,6 +10,8 @@ This file tracks notable changes to **psychrometricsExt**. The format is based o
 
 [View Changes](https://github.com/NREL/psychrometricsExt/compare/main...develop)
 
+*This is the first version to strictly follow the semantic versioning rules.*
+
 ### Added
 
 - This changelog
@@ -46,6 +48,7 @@ This file tracks notable changes to **psychrometricsExt**. The format is based o
   precisely describes what it calculates)
 - Renamed `stdPressure()` to `standardPressure()`
 - Renamed `stdTemp()` to `standardTemp()`
+- Updated documentation throughout
 - The "Alliance for Sustainable Energy" is now the "Alliance for Energy
   Innovation"
 
