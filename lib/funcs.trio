@@ -1,623 +1,2007 @@
-----------------------------------------------------------------------------------------------------
 name:dewPoint
-func
-psychrometrics
 doc:
-  Computes dew-point temperature given ambient pressure and humidity ratio. Ported from 'Dew_point'
-  VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+  Computes dew-point temperature given partial pressure of water vapor.
   
-  - **p:** Ambient pressure
-  - **w:** Humidity ratio
+  Inputs
+  ------
+  
+  - 'pW': Partial pressure of water vapor
   
   Returns
   -------
   
   Dew-point temperature (°C)
-
+  
   References
   ----------
-  1. Equations (39)-(40), p. 1.9, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-src:
-  (p, w) => do
-    // Coerce inputs to SI units
-    p = p.to(1kPa)
-    w = w.to(1)
-
-    // Coefficients, ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.9
-    c14: 6.54
-    c15: 14.526
-    c16: 0.7389
-    c17: 0.09486
-    c18: 0.4569
-
-    // Water vapor partial pressure [kPa]
-    pW: partialPressure(p, w, 1kPa)
-
-    // Alpha, ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.9
-    alpha: logE(pW)
-
-    // Eq. (39), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.9
-    tDP: (c14 + c15*alpha + c16*pow(alpha,2) + c17*pow(alpha,3) + c18*pow(pW, 0.1984)).as(1°C)
-
-    // If dew point is below 0°C, use alternate equation
-    if (tDP < 0°C) do
-      // Eq. (40), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.9
-      tDP = (6.09 + 12.608*alpha + 0.4959*pow(alpha,2)).as(1°C)
-    end
-
-    // Return
-    tDP
-  end
-----------------------------------------------------------------------------------------------------
-name:dryAirDensity
+  1. Equation (39)-(40), p. 1.11, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
 func
 psychrometrics
-doc:
-  Computes dry air density given dry bulb temperature, humidity ratio, and ambient pressure. Ported
-  from 'Dry_Air_Density' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+src:
+  (pW) => do
+    // Convert to SI units
+    pW = pW.to(1kPa)
+    
+    // Range check
+    if (pW < 1.93E-43kPa) do
+      throw "pW < 1.93E-43kPa; this function is valid only between 1.93E-43kPa and 1000kPa"
+    else if (pW > 1000kPa) do
+      throw "pW > 1000kPa; this function is valid only between 1.93E-43kPa and 1000kPa"
+    end
+    
+    // Remove units (to avoid computation exceptions)
+    // (Known units are still [kPa])
+    pW = pW.as(1)
+      
+    // Above freezing: Eq. (39), p. 1.11, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    if (pW >= 0.6112kPa) do
+      // Coefficients, p. 1.11, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      n1  :  0.11670521452767E4
+      n2  : -0.72421316703206E6
+      n3  : -0.17073846940092E2
+      n4  :  0.12020824702470E5
+      n5  : -0.32325550322333E7
+      n6  :  0.14915108613530E2
+      n7  : -0.48232657361591E4
+      n8  :  0.40511340542057E6
+      n9  : -0.23855557567849E0
+      n10 :  0.65017534844798E3
+      
+      // Beta parameter
+      beta: pow(pW / 1000, 0.25)
+      
+      // E, F, G terms
+      capE:      beta.pow(2) + n3 * beta + n6
+      capF: n1 * beta.pow(2) + n4 * beta + n7
+      capG: n2 * beta.pow(2) + n5 * beta + n8
+      
+      // D term
+      capD: (2 * capG) / (-1 * capF - (capF.pow(2) - 4 * capE * capG).pow(0.5))
+      
+      // Eq. (39)
+      tDP_K: 0.5 * (n10 + capD - ((n10 + capD).pow(2) - 4 * (n9 + n10 * capD)).pow(0.5))
+    
+    // Below freezing: Eq. (40), p. 1.11, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    else do
+      // Coefficients, p. 1.11, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      d0  :  0.2125733930680444E3
+      d1  : -0.1111829158329247E2
+      d2  :  0.1013995574858111E0
+      d3  :  0.2129587161785930E-5
   
-  - **tDB:** Dry bulb temperature
-  - **w:** Humidity ratio
-  - **p:** Ambient pressure
+      e0  :  0.1000000000000000E1
+      e1  : -0.8689545484617577E-1
+      e2  :  0.2295161845152704E-2
+      e3  : -0.1748895897772460E-4
+      
+      // Pi parameter
+      pi: logE(1000 * pW)
+      
+      // Eq. (40)
+      numerator:   d0 + d1 * pi + d2 * pi.pow(2) + d3 * pi.pow(3)
+      denominator: e0 + e1 * pi + e2 * pi.pow(2) + e3 * pi.pow(3)
+      tDP_K: numerator / denominator
+    end
+    
+    // Units and return
+    tDP: tDP_K.as(1K).to(1°C)
+  end
+---
+name:dewPoint2
+doc:
+  Computes dew-point temperature given humidity ratio and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'w': Humidity ratio
+  - 'p': Total air pressure
+  
+  Returns
+  -------
+  
+  Dew-point temperature (°C)
+  
+  Notes
+  -----
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  
+  References
+  ----------
+  See documentation for `dewPoint()` and `partialPressure()`
+  
+  
+func
+psychrometrics
+src:
+  (w, p:standardPressure()) => do
+    // Convert to SI units
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
+    p = p.to(1kPa)
+    
+    // Calculate partial pressure
+    pW: partialPressure(w, p)
+    
+    // Calculate dew-point temperature
+    dewPoint(pW)
+  end
+---
+name:dewPoint3
+doc:
+  Computes dew-point temperature given dry bulb temperature, relative humidity, and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'rh': Relative humidity
+  - 'p': Total air pressure
+  
+  Returns
+  -------
+  
+  Dew-point temperature (°C)
+  
+  Notes
+  -----
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  
+  References
+  ----------
+  See documentation for `dewPoint2()` and `humidityRatio2()`
+  
+  
+func
+psychrometrics
+src:
+  (tDB, rh, p:standardPressure()) => do
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    rh = rh.to(1%RH)
+    p = p.to(1kPa)
+    
+    // Calculate humidity ratio
+    w: humidityRatio2(tDB, rh, p)
+    
+    // Calculate dew-point temperature
+    dewPoint2(w, p)
+  end
+---
+name:dewPointMagnus
+doc:
+  Computes dew-point temperature given dry bulb temperature and relative humidity using the [Magnus formula]`https://en.wikipedia.org/wiki/Dew_point#Calculating_the_dew_point` approximation. This approximation is valid between -40°C and 50°C. It shows greater error for lower temperatures and lower relative humidities.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'rh': Relative humidity
+  
+  Returns
+  -------
+  
+  Dew-point temperature (°C)
+  
+  References
+  ----------
+  1. "Calculating the dew point", *[Dew point]`https://en.wikipedia.org/wiki/Dew_point`*, Wikipedia (Retrieved 8/21/2026)
+func
+psychrometrics
+src:
+  (tDB, rh) => do
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    rh = rh.to(1%RH)
+    
+    // Range check
+    if (tDB > 50°C) do
+      throw "tDB > 50°C; the Magnus formula approximation is valid only between -40°C and 50°C"
+    else if (tDB < -40°C) do
+      throw "tDB < -40°C; the Magnus formula approximation is valid only between -40°C and 50°C"
+    end
+    
+    // Remove units (to avoid computation exceptions)
+    // (Known units are still [°C] and [%RH])
+    tDB = tDB.as(1)
+    rh = rh.as(1)
+    
+    // Constants
+    b: 17.625
+    c: 243.04
+    
+    // Calculate gamma function
+    gamma: logE(rh / 100) + (b * tDB) / (c + tDB)
+    
+    // Calculate dew-point temperature
+    tDP: (c * gamma) / (b - gamma)
+    
+    // Units and return
+    tDP.as(1°C)
+  end
+---
+name:dryAirDensity
+doc:
+  Computes dry air density (the density of the dry air component of an air-water mixture) given dry-bulb temperature, humidity ratio, and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'w': Humidity ratio
+  - 'p': Total air pressure
   
   Returns
   -------
   
   Dry air density (kg/m³)
-
+  
   Notes
   -----
-  1. Dry air density is developed as specific volume in the ASHRAE handbook; density is the
-     reciprocal. Note that the total density of an air-water mixture is
-       rho_moist_air = rho * (1 + w)
-     in which w is the humidity ratio.
-  2. Output units are kilogram of dry air per cubic meter. However, because SkySpark does not have a
-     standard unit 'kg_dry/m³', the (more ambiguous) unit 'kg/m³' is used instead.
-  3. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure
-     at sea level) is assumed.
-  4. At this time there is no IP unit for density supported by SkySpark. Therefore, converting
-     the output of this function to IP requires some shenanigans. For instance, to convert to
-     (lb/ft³) use:
-       dryAirDensity(tDB, w, p).as(1) * 1kg.to(1lb) / 1m³.to(1ft³)
-     This gets you the custom unit '_lb/ft³'.
-
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  2. The total, or moist air, density 'ρ' of an air-water mixture is
+       ρ = ρ_da * (1 + w)
+     in which 'ρ_da' is the dry air density and 'w' is the humidity ratio.
+  3. Output units are kilogram of dry air per cubic meter. However, because SkySpark does not have a standard unit 'kg_dry/m³', the (more ambiguous) unit 'kg/m³' is used instead.
+  4. There are no IP units for density currently defined in Project Haystack.
+  
   References
   ----------
-  1. Equation (28), p. 1.9, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-src:
-  (tDB, w, p:stdPressure(0m)) => do
-
-    // Coerce inputs to SI units
-    // Note: Temperature is now in Kelvin
-    tK: tDB.to(1K)
-    p = p.to(1kPa)
-
-    // Remove unit (to avoid computation exceptions)
-    tK = tK.as(1)
-    p = p.as(1)
-    w = w.as(1)
-
-    // Dry air specific volume [m³/kg]:
-    // Eq. (28), p. 1.8, ASHRAE Fundamentals Handbook (2013), SI Edition
-    v: ( 0.287042 * tK * (1 + 1.607858*w) ) / p
-
-    // Dry air density [kg/m³]
-    rho: (1 / v).as(1kg/m³)
-  end
-----------------------------------------------------------------------------------------------------
-name:humidityRatio
+  1. Equation (11), p. 1.9, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Equation (28), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
 func
 psychrometrics
-doc:
-  Computes humidity ratio given dry bulb temperature, wet bulb temperature, and ambient pressure.
-  Ported from 'Hum_rat' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+src:
+  (tDB, w, p:standardPressure(0m)) => do
+    // Convert to SI units
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
+    p = p.to(1kPa)
   
-  - **tDB:** Dry bulb temperature
-  - **tWB:** Wet bulb temperature
-  - **p:** Ambient pressure
+    // Specific volume [m³/kg_dry]:
+    v: moistAirSpecificVolume(tDB, w, p)
+    
+    // Remove unit (to avoid computation exceptions)
+    v = v.as(1)
+  
+    // Dry air density [kg_dry/m³]:
+    // Eq. (11), p. 1.9, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    // Dry air component only
+    rho_da: (1 / v).as(1kg/m³)
+  end
+---
+name:dryAirSpecificEnthalpy
+doc:
+  Computes dry air specific enthalpy (the specific enthalpy of the dry air component of an air-water mixture) given dry-bulb temperature. Two alternative calculation methods are supported; see *Options*.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  
+  Options
+  -------
+  
+  The following control options are supported:
+  
+  - 'calcMethod': Specific enthalpy calculation method (Default = "lookup")
+    - If "lookup", calculates specific enthalpy using lookup table values for specific heat with equation (30); see *References*
+    - If "approx", calculates specific enthalpy using the approximation in equation (30); see *References*
+  
+  Returns
+  -------
+  
+  Dry air specific enthalpy (kJ/kg_dry)
+  
+  Notes
+  -----
+  1. SkySpark supports two sets of units for enthalpy: energy per unit mass of *moist air* (e.g. 'kJ/kg') and energy per unit mass of *dry air* (e.g. 'kJ/kg_dry'). The fundamental units are the same, but the interpretation is different. The *2025 ASHRAE Handbook: Fundamentals*, SI Edition, gives specific enthalpy in kilojoules per kilogram of dry air. Therefore, SkySpark output units are 'kJ/kg_dry'. The equivalent IP unit is 'btu/lb_dry'.
+  2. In HVAC calculations, specific enthalpy has an arbitrary zero point. In SI units, the zero point is 0°C; in IP units it is 0°F. As a result, the IP quantity for specific enthalpy is offset from the SI quantity by approximately 17.88 kJ/kg. To convert the output of this function to IP units, use the convenience function `specificEnthalpyUnitConvert()`. For more information, see the documentation for `specificEnthalpyUnitConvert()`.
+  3. This function's output does not exactly match the values in Table 3 of *2025 ASHRAE Handbook: Fundamentals*. ASHRAE used an alternative software package and formulations to develop Table 3. Equation (30) is an approximation.
+  
+  References
+  ----------
+  1. Table 2, pp. 1.2-1.4, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Equations (30), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
+src:
+  (tDB, opts:{}) => do
+    // Default options
+    opts = merge({calcMethod:"lookup"}, opts)
+    
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+  
+    // Remove units (to avoid computation exceptions)
+    tDB = tDB.as(1)
+  
+    // Dry air specific enthalpy [kJ/kg_dry]:
+    if (opts->calcMethod == "approx") do
+      // Eq. (30), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      hda: 1.006*tDB
+    
+    else if (opts->calcMethod == "lookup") do
+      // Eq. (30) with Table 2 lookup
+      hda: dryAirSpecificHeat(tDB) * tDB
+      
+    else do
+      throw "Unsupported calculation method option; must be one of: \"lookup\", \"approx\"."
+    end
+    
+    // Return
+    hda.as(1kJ/kg_dry)
+  end
+---
+name:dryAirSpecificHeat
+doc:
+  Returns the specific heat capacity of dry air using a lookup from Table 2 in the *2025 ASHRAE Handbook: Fundamentals*, SI Edition.
+  
+  Inputs
+  ------
+  
+  - 't': Temperature
+  
+  Returns
+  -------
+  
+  Specific heat of dry air (kJ/kg°K)
+  
+  Notes
+  -----
+  
+  1. To increase computational efficiency, a sampled version of Table 2 is used for the lookup.
+  2. The SkySpark unit of specific heat is, somewhat confusingly, 'J/kg°K', although the SI units for energy, mass, and absolute temperature are 'J', 'kg', and 'K', respectively. (Note the lack of '°'.)
+  3. There are no IP units for specific heat currently defined in Project Haystack.
+  
+  References
+  ----------
+  1. Table 2, pp. 1.2-1.4, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
+src:
+  (t) => do
+    // Convert to SI units
+    t = t.to(1°C)
+    
+    // Range check
+    if (t > 90°C) do
+      throw "t > 90°C; this lookup function is valid only between -60°C and 90°C"
+    else if (t < -223.15°C) do
+      throw "t < -60°C; this lookup function is valid only between -60°C and 90°C"
+    end
+  
+    // Lookup table: Sampled from Table 2, pp. 1.2-1.4, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    // Only rows where the c_p,da value changes on the following row are included
+    cA_table: [
+      {t: -60°C, cpda:1.0062},
+      {t: -59°C, cpda:1.0062},
+      {t: -56°C, cpda:1.0061}, 
+      {t: -52°C, cpda:1.0060},
+      {t: -48°C, cpda:1.0059},
+      {t: -44°C, cpda:1.0058}, 
+      {t: -38°C, cpda:1.0057},
+      {t: -29°C, cpda:1.0056},
+      {t: -11°C, cpda:1.0055}, 
+      {t:  -2°C, cpda:1.0056},
+      {t:   4°C, cpda:1.0057},
+      {t:   9°C, cpda:1.0058}, 
+      {t:  13°C, cpda:1.0059},
+      {t:  17°C, cpda:1.0060},
+      {t:  20°C, cpda:1.0061}, 
+      {t:  23°C, cpda:1.0062},
+      {t:  26°C, cpda:1.0063},
+      {t:  29°C, cpda:1.0064}, 
+      {t:  31°C, cpda:1.0065},
+      {t:  34°C, cpda:1.0066},
+      {t:  36°C, cpda:1.0067}, 
+      {t:  38°C, cpda:1.0068},
+      {t:  41°C, cpda:1.0069},
+      {t:  43°C, cpda:1.0070}, 
+      {t:  45°C, cpda:1.0071},
+      {t:  46°C, cpda:1.0072},
+      {t:  48°C, cpda:1.0073}, 
+      {t:  50°C, cpda:1.0074},
+      {t:  52°C, cpda:1.0075},
+      {t:  54°C, cpda:1.0076}, 
+      {t:  55°C, cpda:1.0077},
+      {t:  57°C, cpda:1.0078},
+      {t:  59°C, cpda:1.0079}, 
+      {t:  60°C, cpda:1.0080},
+      {t:  62°C, cpda:1.0081},
+      {t:  63°C, cpda:1.0082}, 
+      {t:  65°C, cpda:1.0083},
+      {t:  66°C, cpda:1.0084},
+      {t:  68°C, cpda:1.0085}, 
+      {t:  69°C, cpda:1.0086},
+      {t:  70°C, cpda:1.0087},
+      {t:  72°C, cpda:1.0088}, 
+      {t:  73°C, cpda:1.0089},
+      {t:  75°C, cpda:1.0090},
+      {t:  76°C, cpda:1.0091}, 
+      {t:  77°C, cpda:1.0092},
+      {t:  78°C, cpda:1.0093},
+      {t:  80°C, cpda:1.0094}, 
+      {t:  81°C, cpda:1.0095},
+      {t:  82°C, cpda:1.0096},
+      {t:  83°C, cpda:1.0097}, 
+      {t:  84°C, cpda:1.0098},
+      {t:  86°C, cpda:1.0099},
+      {t:  87°C, cpda:1.0100}, 
+      {t:  88°C, cpda:1.0101},
+      {t:  89°C, cpda:1.0102},
+      {t:  90°C, cpda:1.0103}
+    ].toGrid
+    
+    // Find matching table row
+    match: cA_table.find() (row, i) => do
+      // Matching condition (last row without going over)
+      (t <= row->t) and (i == 0 or (t > cA_table[i-1]->t))
+    end
+    
+    // Return
+    match->cpda.as("kJ/kg°K")
+  end
+---
+name:ethyleneGlycolPropertyFitCoefficients
+func
+nodoc
+psychrometrics
+src:
+  () => do
+    // Coefficients for polynomial fits of ethelyne glycol + water blend properties as a function of glycol ratio and temperature
+    // Fits from: Å. Melinder, "Properties of Secondary Working Fluids (Secondary Refrigerants or Coolants, Heat Transfer Fluids) for Indirect Systems", 2nd Edition, 2010 (ISBN: 9782913149830)
+    [
+      {property: "density", c00: 1034, c01: -0.4781, c02: -0.002692, c03: 0.000004725, c10: 1.311, c11: -0.006876, c12: 0.00004805, c13: 0.0000000169, c20: 0.0000749, c21: 0.00007855, c22: -0.0000003995, c23: 0.000000004982, c30: -0.0001062, c31: 0.000001229, c32: -0.00000001153, c40: -0.0000009623, c41: -0.00000007211, c50: 0.00000004891},
+      {property: "dynamicViscosity", c00: 0.4705, c01: -0.0255, c02: 0.0001782, c03: -0.0000007669, c10: 0.02471, c11: -0.0001171, c12: 0.000001052, c13: -0.00000001634, c20: 0.000003328, c21: 0.000001086, c22: 0.00000001051, c23: -0.0000000006475, c30: 0.000001659, c31: 0.000000003157, c32: 0.0000000004063, c40: 0.00000003089, c41: 0.0000000001831, c50: -0.000000001865},
+      {property: "freezingPoint", c00: -15.25, c01: -0.000001566, c02: -0.0000002278, c03: 0.000000002169, c10: -0.808, c11: -0.000001339, c12: 0.00000002047, c13: -0.00000000002717, c20: -0.01334, c21: 0.00000006322, c22: 0.0000000002373, c23: -0.000000000002183, c30: -0.00007293, c31: 0.000000001764, c32: -0.00000000002442, c40: 0.000001006, c41: -0.00000000007662, c50: 0.00000000114},
+      {property: "specificHeat", c00: 3.737, c01: 0.00293, c02: -0.000004675, c03: -0.00000001389, c10: -0.01799, c11: 0.0001046, c12: -0.0000004147, c13: 0.0000000001847, c20: -0.00009933, c21: 0.0000003516, c22: 0.000000005109, c23: -0.00000000007138, c30: 0.00000261, c31: -0.000000001189, c32: -0.0000000001643, c40: 0.00000001537, c41: -0.0000000004272, c50: -0.000000001618},
+      {property: "thermalConductivity", c00: 0.472, c01: 0.0008903, c02: -0.000001058, c03: -0.000000002789, c10: -0.004286, c11: -0.00001473, c12: 0.0000001059, c13: -0.0000000001142, c20: 0.00001747, c21: 0.00000006814, c22: -0.000000003612, c23: 0.000000000002365, c30: 0.00000003017, c31: -0.000000002412, c32: 0.00000000004004, c40: -0.000000001322, c41: 0.00000000002555, c50: 0.00000000002678}
+    ].toGrid
+  end
+---
+name:glycolWaterBlendProps
+doc:
+  Calculates and returns the physical properties of a glycol-water blend for a specific glycol concentration and fluid temperature.
+  
+  Inputs
+  ------
+  
+  - 'glycolType': Type of glycol; either "ethylene" or "propylene"
+  - 'concentrationBy': How glycol concentration is specified; either by "weight" or "volume"
+  - 'concentration': Glycol concentration (%)
+  - 'temp': Fluid temperature (°C)
+  
+  Outputs
+  -------
+  
+  Outputs a dictionary with the following properties of the glycol blend at the specified temperature:
+  
+  - 'density': Density
+  - 'dynamicViscosity': Dynamic viscosity
+  - 'freezingPoint': Freezing point
+  - 'specificGravity': Specific gravity
+  - 'specificHeat': Specific heat
+  - 'thermalConductivity': Thermal conductivity
+  
+  The output properties calculated can be limited via the 'outputProps' option.
+  
+  Options
+  -------
+  
+  'opts' is reserved for future use.
+  
+  Examples
+  --------
+  
+    // Calculate all properties of a 30% (by weight) ethylene glycol mixture at 0°C
+    glycolWaterBlendProps("ethylene", "weight", 30%, 0°C)  >> {density:1045kg/m³, freezingPoint:-14.58°C, ...}
+    
+    // Calculate the density and specific heat of a 40% (by volume) proplyene glycol mixture at room temperature
+    glycolWaterBlendProps("propylene", "volume", 40%, 70°F, {outputProps:["density", "specificHeat"]})  >> {density:1032kg/m³, specificHeat:3696J/kg°K}
+  
+  Notes
+  -----
+  
+  1. At this time, SkySpark / Project Haystack does not support IP units for some properties calculated by this function (e.g. dynamic viscosity and specific heat). Conversion to IP units must be done manually.
+  
+  References
+  ----------
+  1. Melinder, Å., *Properties of Secondary Working Fluids (Secondary Refrigerants or Coolants, Heat Transfer Fluids) for Indirect Systems*, 2nd Ed., IIF-IIR - France, 2010. ISBN: 9782913149830
+func
+psychrometrics
+src:
+  (glycolType, concentrationBy, concentration, temp, opts:{}) => do
+  
+    /////////////
+    // Options //
+    /////////////
+  
+    // Default options
+    opts = merge({outputUnits:"SI"}, opts)
+    
+    // Output properties
+    outputProps: ["density", "dynamicViscosity", "freezingPoint", "specificGravity", "specificHeat", "thermalConductivity"]
+    if (opts.has("outputProps")) do
+      // User-requested properties
+      if (opts->outputProps.isList) do
+        userOutputProps: opts->outputProps
+      else if (opts->outputProps.isDict) do
+        userOutputProps: opts->outputProps.names
+      else if (opts->outputProps.isStr) do
+        userOutputProps: [opts->outputProps]
+      else do
+        throw "Can't process 'outputProps' option: expected list or dict; found " + debugType(opts->outputProps) + "."
+      end
+      
+      // Filter output properties
+      outputProps = userOutputProps.findAll(v => outputProps.contains(v))
+      
+      // Warn if anything was dropped
+      if (outputProps.size != userOutputProps.size) do
+        unsupportedProps: userOutputProps.findAll(v => not outputProps.contains(v))
+        logWarn(
+          "pyschrometrics", "Ignoring unsupported glycol-water blend properties(s) " +
+          unsupportedProps.map(v => "\"" + v + "\"").concat(", ") + "."
+        )
+      end
+    end
+    
+    ///////////
+    // Setup //
+    ///////////
+    
+    // Check for supported glycol (additive) type
+    supportedGlycolTypes: ["ethylene", "propylene"]
+    if (not glycolType.isStr) do
+      throw "Can't process 'glycolType': expected string; found " + debugType(glycolType) + "."
+    else if (not glycolType.lower.in(supportedGlycolTypes)) do
+      throw "Unsupported 'glycolType' value \"" + glycolType + "\". Must be one of: " +
+        supportedGlycolTypes.map(v => "\"" + v + "\"").concat(", ")
+    end
+  
+    // Normalize glycol type
+    glycolType = glycolType.lower
+    
+    // Check for type of concentration
+    supportedConcentrationBy: ["weight", "volume"]
+    if (not concentrationBy.isStr) do
+      throw "Can't process 'concentrationBy': expected string; found " + debugType(concentrationBy) + "."
+    else if (not concentrationBy.lower.in(supportedConcentrationBy)) do
+      throw "Unsupported 'concentrationBy' value \"" + concentrationBy + "\". Must be one of: " +
+        supportedConcentrationBy.map(v => "\"" + v + "\"").concat(", ")
+    end
+    
+    // Normalize concentration type
+    glycolType = glycolType.lower
+    
+    // Concentration as percent
+    if (concentration.unit == "%") do
+      // Range check
+      if (concentration < 0% or concentration > 100%) do
+        throw "'concentration' (percent) must be within the range 0% to 100%"
+      end
+      
+    // Unsupported unit
+    end else do
+      throw "'concentration' must be specified in percent (0-100%)"
+    end
+    
+    // Default units
+    defaultUnits: {
+      freezingPoint: "°C",
+      density: "kg/m³",
+      specificHeat: "J/kg°K",
+      specificGravity: "",
+      thermalConductivity: "W/m°K",
+      dynamicViscosity: "mNs/m²"
+    }
+    
+    //////////////////
+    // Coefficients //
+    //////////////////
+    
+    // Get calculation constants / coefficients by glycol type
+    if (glycolType == "ethylene") do
+      // Ethylene glycol
+      xm: 30.8462
+      ym: 31.728
+      a: -0.00096210
+      b:  1.09350400
+      c: -0.25767200
+      coeffTable: ethyleneGlycolPropertyFitCoefficients()
+      
+    else if (glycolType == "propylene") do
+      // Propylene glycol
+      xm: 30.7031
+      ym: 31.7083
+      a: -0.000043534
+      b:  1.002835143
+      c:  0.999885902
+      coeffTable: propyleneGlycolPropertyFitCoefficients()
+      
+    else do
+      // Unsupported
+      throw "Unsupported glycol type. (This is unexpected; debug your code.)"
+    end
+    
+    //////////////////
+    // Calculations //
+    //////////////////
+    
+    // Get concentration by weight
+    if (concentrationBy == "volume") do
+      // Convert using IIR book correction factors
+      cA: a * pow(concentration, 2) + b * concentration + c
+    else do
+      // Already concentration by weight
+      cA: concentration
+    end
+    
+    // Empirical fit function
+    empiricalFunc: (x_delta, y_delta, coeff) => do
+      // Intermediate quantities
+      y_delta_sq: pow(y_delta,2)
+      y_delta_cu: pow(y_delta,3)
+      x_delta_sq: pow(x_delta,2)
+      x_delta_cu: pow(x_delta,3)
+      x_delta_qu: pow(x_delta,4)
+      x_delta_fi: pow(x_delta,5)
+      
+      // Output
+      coeff["c00"] + coeff["c01"] * y_delta + coeff["c02"] * y_delta_sq + coeff["c03"] * y_delta_cu +
+      coeff["c10"] * x_delta + coeff["c11"] * x_delta * y_delta + coeff["c12"] * x_delta * y_delta_sq + coeff["c13" ] * x_delta * y_delta_cu +
+      coeff["c20"] * x_delta_sq + coeff["c21"] * x_delta_sq * y_delta + coeff["c22"] * x_delta_sq * y_delta_sq + coeff["c23"] * x_delta_sq * y_delta_cu +
+      coeff["c30"] * x_delta_cu + coeff["c31"] * x_delta_cu * y_delta + coeff["c32"] * x_delta_cu * y_delta_sq +
+      coeff["c40"] * x_delta_qu + coeff["c41"] * x_delta_qu * y_delta + 
+      coeff["c50"] * x_delta_fi
+    end
+    
+    // Delta from reference point
+    xDelta: cA.as(1) - xm
+    yDelta: temp.to(1°C).as(1) - ym
+    
+    // Iterate properties to calculate
+    out: {}
+    outputProps
+      .findAll(prop => coeffTable.colToList("property").contains(prop))
+      .map() prop => do
+        // Calculate property from standard formula
+        val: empiricalFunc(xDelta, yDelta, coeffTable.find(row => row->property==prop)).as(defaultUnits[prop])
+        
+        // Add to output
+        out = out.set(prop, val)
+      end
+    
+    // Specific gravity
+    if (outputProps.contains("specificGravity")) do
+      // Calculate density
+      if (out.has("density")) do
+        rho: out->density // Already calculated
+      else do
+        rho: empiricalFunc(xDelta, yDelta, coeffTable.find(row => row->property=="density")).as(defaultUnits->density)
+      end
+      
+      // Calculate reference density
+      xDelta_0: 0 - xm
+      rho_0: empiricalFunc(xDelta_0, yDelta, coeffTable.find(row => row->property=="density")).as(defaultUnits->density)
+      
+      // Specific gravity is the ratio
+      sg: rho.as(1) / rho_0.as(1)
+      out = out.set("specificGravity", sg)
+    end
+  
+    /////////////////////
+    // Post-Processing //
+    /////////////////////
+    
+    // Unit conversion: already SI; only needed for IP
+    if (opts["outputUnits"] == "IP") do
+      // Convert to ASHRAE IP standard units
+      throw "IP units are not supported until Project Haystack's unit database is updated to include them."
+      
+      // Future Example
+      // if (out.has("freezingPoint")) out = out.set("freezingPoint", out->freezingPoint.to(1°F))
+      
+      // Note: Specific gravity is unitless
+      
+    end else if (opts["outputUnits"] != "SI") do
+      throw "Unrecognized 'outputUnits' option \"" + opts["outputUnits"] + "\"; must be either \"SI\" or \"IP\"."
+    end
+    
+    // Return output
+    return out
+    
+    // For spot-checking results...
+    // https://www.engineeringtoolbox.com/ethylene-glycol-d_146.html
+    // https://www.engineeringtoolbox.com/propylene-glycol-d_363.html
+  end
+---
+name:humidityRatio
+doc:
+  Computes humidity ratio given partial pressure of water vapor and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'pW': Partial pressure of water vapor
+  - 'p': Total air pressure
   
   Returns
   -------
   
   Humidity ratio (unitless)
-
+  
   Notes
   -----
-  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure
-     at sea level) is assumed.
-  2. The output humidity ratio is unitless (kg/kg or lb/lb). SkySpark also supports the unit
-     'gH₂O/kgAir'; to convert the output of this function to 'gH₂O/kgAir' multiply by 1000.
-
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  2. The output humidity ratio is unitless (kg/kg or lb/lb). SkySpark also supports the units 'g/kg' and 'gH₂O/kgAir'; to convert the output of this function to one of these units first multiply by 1000.
+  
   References
   ----------
-  1. Equation (23), p. 1.8, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-  2. Equation (35), p. 1.9, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-  3. Equation (37), p. 1.9, *ASHRAE Fundamentals Handbook (2013), SI Edition*
+  1. Equation (21), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
 src:
-  (tDB, tWB, p:stdPressure(0m)) => do
-    // Coerce inputs to SI units
+  (pW, p:standardPressure()) => do
+    // Convert to SI units
+    pW = pW.to(1kPa)
+    p = p.to(1kPa)
+    
+    // Eq. (21), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    w: 0.621945 * pW / (p - pW)
+  
+    // Coerce to unitless quantity [kg/kg]
+    w = w.as(1)
+  end
+---
+name:humidityRatio2
+doc:
+  Computes humidity ratio given dry-bulb temperature, relative humidity, and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'rh': Relative humidity
+  - 'p': Total air pressure
+  
+  Returns
+  -------
+  
+  Humidity ratio (unitless)
+  
+  Notes
+  -----
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  2. The output humidity ratio is unitless (kg/kg or lb/lb). SkySpark also supports the units 'g/kg' and 'gH₂O/kgAir'; to convert the output of this function to one of these units first multiply by 1000.
+  
+  References
+  ----------
+  1. Equation (21), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Equation (5)-(6), p. 1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  
+  See also: `saturationPressure()`, `humidityRatio()`
+  
+func
+psychrometrics
+src:
+  (tDB, rh, p:standardPressure()) => do
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    rh = rh.to(1%RH)
+    p = p.to(1kPa)
+    
+    // Water vapor saturation pressure at dry-bulb temperature
+    pWS: saturationPressure(tDB)
+    
+    // Eq. (23), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition (algebra manipulated)
+    // Definition of %RH; pW here is equivalent to p_ws(t_d) in eq. (23)
+    pW: (rh.as(1) / 100) * pWS
+    
+    // Humidity ratio from partial pressure
+    w: humidityRatio(pW, p)
+  end
+---
+name:humidityRatio3
+doc:
+  Computes humidity ratio given dry-bulb temperature, wet-bulb temperature, and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'tWB': Wet-bulb temperature
+  - 'p': Total air pressure
+  
+  Returns
+  -------
+  
+  Humidity ratio (unitless)
+  
+  Notes
+  -----
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  2. The output humidity ratio is unitless (kg/kg or lb/lb). SkySpark also supports the units 'g/kg' and 'gH₂O/kgAir'; to convert the output of this function to one of these units first multiply by 1000.
+  
+  References
+  ----------
+  1. Equation (5)-(6), p. 1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Equation (22), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  3. Equation (35), p. 1.11, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  4. Equation (37), p. 1.11, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  
+  See also: `saturationHumidityRatio()`
+  
+func
+psychrometrics
+src:
+  (tDB, tWB, p:standardPressure(0m)) => do
+    // Convert to SI units
     tDB = tDB.to(1°C)
     tWB = tWB.to(1°C)
     p = p.to(1kPa)
-
-    // Water vapor saturation pressure [kPa] at wet bulb temperature
-    pWS: saturationPressure(tWB)
-
-    // Remove unit (to avoid computation exceptions)
+  
+    // Saturation humidity ratio corresponding to wet-bulb temperature
+    wSstar: saturationHumidityRatio(tWB, p)
+    
+    // Remove units (to avoid computation exceptions)
     // (Known units are still [°C] and [kPa])
     tDB = tDB.as(1)
     tWB = tWB.as(1)
     p = p.as(1)
-    pWS = pWS.as(1)
-
-    // Humidity ratio for saturated air at wet bulb temperature:
-    // Eq. (23), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.8
-    ws: 0.621945 * pWS / (p - pWS)
-
+    wSstar = wSstar.as(1)
+    
     // Compute humidity ratio
     if (tDB >= 0°C) do
-      // Above freezing: Eq. (35), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.9
-      w: ( (2501 - 2.326*tWB)*ws - 1.006*(tDB - tWB) ) / ( 2501 + 1.86*tDB - 4.186*tWB )
+      // Above freezing: Eq. (35), p. 1.11, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      w: ((2501 - 2.326 * tWB) * wSstar - 1.006 * (tDB - tWB)) / (2501 + 1.86 * tDB - 4.186 * tWB)
     else do
-      // Below freezing: Eq. (37), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.9
-      w: ( (2830 - 0.24*tWB)*ws - 1.006*(tDB - tWB) ) / ( 2830 + 1.86*tDB - 2.1*tWB )
+      // Below freezing: Eq. (37), p. 1.11, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      w: ((2830 - 0.240 * tWB) * wSstar - 1.006 * (tDB - tWB)) / (2830 + 1.86 * tDB - 2.100 * tWB)
     end
-
+  
     // Coerce to unitless quantity [kg/kg]
     w = w.as(1)
   end
-----------------------------------------------------------------------------------------------------
-name:humidityRatio2
-func
-psychrometrics
+---
+name:humidityRatio4
 doc:
-  Computes humidity ratio given dry bulb temperature, relative humidity, and ambient pressure.
-  Ported from 'Hum_rat2' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+  Computes humidity ratio given dry-bulb temperature and moist air specific enthalpy. Two alternative calculation methods are supported; see *Options*.
   
-  - **tDB:** Dry bulb temperature
-  - **rh:** Relative humidity
-  - **p:** Ambient pressure
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'h': Moist air specific enthalpy
+  
+  Options
+  -------
+  
+  The following control options are supported:
+  
+  - 'calcMethod': Humidity ratio calculation method (Default = "lookup")
+    - If "lookup", calculates humidity ratio from specific enthalpy using lookup table values for specific heat and equations (29)-(31); see *References*
+    - If "approx", calculates humidity ratio from specific enthalpy using the approximation in equation (32); see *References*
   
   Returns
   -------
   
   Humidity ratio (unitless)
-
+  
   Notes
   -----
-  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure
-     at sea level) is assumed.
-  2. The output humidity ratio is unitless (kg/kg or lb/lb). SkySpark also supports the unit
-     'gH₂O/kgAir'; to convert the output of this function to 'gH₂O/kgAir' multiply by 1000.
-
+  1. The output humidity ratio is unitless (kg/kg or lb/lb). SkySpark also supports the units 'g/kg' and 'gH₂O/kgAir'; to convert the output of this function to one of these units first multiply by 1000.
+  
   References
   ----------
-  1. Equation (22), p. 1.8, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-  2. Equation (24), p. 1.8, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-src:
-  (tDB, rh, p:stdPressure(0m)) => do
-    // Coerce inputs to SI units
-    p = p.to(1kPa)
-    rh = rh.to(1%RH)
-
-    // Water vapor saturation pressure [kPa] at dry bulb temperature
-    pWS: saturationPressure(tDB)
-
-    // Water vapor partial pressure [kPa]:
-    // Eq. (24), p. 1.8, ASHRAE Fundamentals Handbook (2013), SI Edition
-    pW: rh.as(1) * pWS / 100
-
-    // Humidity ratio: Eq. (22), p. 1.8, ASHRAE Fundamentals Handbook (2013), SI Edition
-    w: 0.621945 * pW / (p - pW)
-
-    // Coerce to unitless quantity [kg/kg]
-    w = w.as(1)
-  end
-----------------------------------------------------------------------------------------------------
-name:moistAirDensity
+  1. Table 2, pp. 1.2-1.4, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Table 3, pp. 1.5-1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  3. Equations (29)-(32), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
 func
 psychrometrics
+src:
+  (tDB, h, opts:{}) => do
+    // Default options
+    opts = merge({calcMethod:"lookup"}, opts)
+    
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    h = h.specificEnthalpyUnitConvert(1kJ/kg_dry) // Handles SI-IP offset
+    
+    // Remove units (to avoid computation exceptions)
+    tDB = tDB.as(1)
+    h = h.as(1)
+  
+    // Moist air specific enthalpy [kJ/kg_dry]:
+    if (opts->calcMethod == "approx") do
+      // Eq. (32), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition (algebra manipulated)
+      w: (h - 1.006*tDB) / (2501 + 1.86*tDB)
+    
+    else if (opts->calcMethod == "lookup") do
+      // Eq. (29)-(31), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition (algebra manipulated)
+      w: (h - dryAirSpecificHeat(tDB) * tDB) / (2501 + saturatedWaterVaporSpecificHeat(tDB) * tDB)
+      
+    else do
+      throw "Unsupported calculation method option; must be one of: \"lookup\", \"approx\"."
+    end
+    
+    // Return
+    w.as(1)
+  end
+---
+name:moistAirDensity
 doc:
-  Computes moist air density given dry bulb temperature, humidity ratio, and ambient pressure.
-  Adapted from Greg Barker's 'Rho_MoistAir_TandPandW_kgPm3' function for Campbell Scientific data
-  loggers.
-
-  Parameters
-  ----------
-
-  - **tDB:** Dry bulb temperature
-  - **w:** Humidity ratio
-  - **p:** Ambient pressure
-
+  Computes moist air density (the total density of an air-water mixture) given dry-bulb temperature, humidity ratio, and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'w': Humidity ratio
+  - 'p': Total air pressure
+  
   Returns
   -------
-
+  
   Moist air density (kg/m³)
-
+  
   Notes
   -----
-  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure
-     at sea level) is assumed.
-  2. Note that at this time there is no IP unit for density supported by SkySpark. Therefore,
-     converting the output of this function to IP requires some shenanigans. For instance, to
-     convert to (lb/ft³) use:
-       moistAirDensity(tDB, w, p).as(1) * 1kg.to(1lb) / 1m³.to(1ft³)
-     This gets you the custom unit '_lb/ft³'.
-
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  2. There are no IP units for density currently defined in Project Haystack.
+  
   References
   ----------
-  1. Equation (11), p. 1.8, *ASHRAE Fundamentals Handbook (2009), SI Edition*
-  2. Equation (28), p. 1.9, *ASHRAE Fundamentals Handbook (2009), SI Edition*
+  1. Equation (11), p. 1.9, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Equation (28), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
 src:
-  (tDB, w, p:stdPressure(0m)) => do
+  (tDB, w, p:standardPressure(0m)) => do
+    // Convert to SI units
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
+    p = p.to(1kPa)
   
-    // Coerce inputs to SI units
-    // Note: Temperature is now in Kelvin
+    // Specific volume [m³/kg_dry]:
+    v: moistAirSpecificVolume(tDB, w, p)
+    
+    // Remove unit (to avoid computation exceptions)
+    v = v.as(1)
+  
+    // Moist air density [kg/m³]:
+    // Eq. (11), p. 1.9, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    rho: ((1 / v)*(1 + w)).as(1kg/m³)
+  end
+---
+name:moistAirSpecificEnthalpy
+doc:
+  Computes moist air specific enthalpy (the total specific enthalpy of an air-water mixture) given dry-bulb temperature and humidity ratio. Two alternative calculation methods are supported; see *Options*.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'w': Humidity ratio
+  
+  Options
+  -------
+  
+  The following control options are supported:
+  
+  - 'calcMethod': Specific enthalpy calculation method (Default = "lookup")
+    - If "lookup", calculates specific enthalpy using lookup table values for specific heat and equations (29)-(31); see *References*
+    - If "approx", calculates specific enthalpy using the approximation in equation (32); see *References*
+  
+  Returns
+  -------
+  
+  Moist air specific enthalpy (kJ/kg_dry)
+  
+  Notes
+  -----
+  1. SkySpark supports two sets of units for enthalpy: energy per unit mass of *moist air* (e.g. 'kJ/kg') and energy per unit mass of *dry air* (e.g. 'kJ/kg_dry'). The fundamental units are the same, but the interpretation is different. The *2025 ASHRAE Handbook: Fundamentals*, SI Edition, gives specific enthalpy in kilojoules per kilogram of dry air. Therefore, SkySpark output units are 'kJ/kg_dry'. The equivalent IP unit is 'btu/lb_dry'.
+  2. In HVAC calculations, specific enthalpy has an arbitrary zero point. In SI units, the zero point is 0°C; in IP units it is 0°F. As a result, the IP quantity for specific enthalpy is offset from the SI quantity by approximately 17.88 kJ/kg. To convert the output of this function to IP units, use the convenience function `specificEnthalpyUnitConvert()`. For more information, see the documentation for `specificEnthalpyUnitConvert()`.
+  3. This function's output does not exactly match the values in Table 3 of *2025 ASHRAE Handbook: Fundamentals*. ASHRAE used an alternative software package and formulations to develop Table 3. Equations (29)-(32) are approximations.
+  
+  References
+  ----------
+  1. Table 2, pp. 1.2-1.4, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Table 3, pp. 1.5-1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  3. Equations (29)-(32), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
+src:
+  (tDB, w, opts:{}) => do
+    // Default options
+    opts = merge({calcMethod:"lookup"}, opts)
+    
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
+  
+    // Remove units (to avoid computation exceptions)
+    tDB = tDB.as(1)
+  
+    // Moist air specific enthalpy [kJ/kg_dry]:
+    if (opts->calcMethod == "approx") do
+      // Eq. (32), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      h: (1.006*tDB + w*(2501 + 1.86*tDB))
+    
+    else if (opts->calcMethod == "lookup") do
+      // Eq. (30) with Table 2 lookup
+      hda: dryAirSpecificHeat(tDB) * tDB
+      
+      // Eq. (31) with Table 3 lookup
+      hg: 2501 + saturatedWaterVaporSpecificHeat(tDB) * tDB
+      
+      // Eq. (29)
+      h: hda + w * hg
+      
+    else do
+      throw "Unsupported calculation method option; must be one of: \"lookup\", \"approx\"."
+    end
+    
+    // Return
+    h.as(1kJ/kg_dry)
+  end
+---
+name:moistAirSpecificHeat
+doc:
+  Returns the specific heat capacity of moist air using a weighted average of the specific heat capacities of the dry air and water vapor components of the air-water mixture.
+  
+  Inputs
+  ------
+  
+  - 't': Temperature
+  - 'w': Humidity ratio
+  
+  Options
+  -------
+  
+  The following control options are supported:
+  
+  - 'calcMethod': Specific heat calculation method (Default = "lookup")
+    - If "lookup", uses lookup table values for dry air and water vapor specific heat; see *References*
+    - If "approx", uses specific heat coefficients from equation (32); see *References*
+  
+  Returns
+  -------
+  
+  Moist air specific heat (kJ/kg°K)
+  
+  Notes
+  -----
+  1. *2025 ASHRAE Handbook: Fundamentals* does not have an equation that expresses moist air specific heat, although Table 3 does provide specific heat values for saturated moist air. The equation used in this function is derived from first principles; see the code comments for the math.
+  2. The SkySpark unit of specific heat is, somewhat confusingly, 'J/kg°K', although the SI units for energy, mass, and absolute temperature are 'J', 'kg', and 'K', respectively. (Note the lack of '°'.)
+  3. There are no IP units for specific heat currently defined in Project Haystack.
+  
+  References
+  ----------
+  1. Table 2, pp. 1.2-1.4, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Table 3, pp. 1.5-1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  3. Equation (32), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
+src:
+  (tDB, w, opts:{}) => do
+    // Default options
+    opts = merge({calcMethod:"lookup"}, opts)
+    
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
+  
+    // Remove units (to avoid computation exceptions)
+    tDB = tDB.as(1)
+  
+    // Dry air and saturated water vapor specific heat
+    if (opts->calcMethod == "approx") do
+      // From eq. (32), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      cp_da: 1.006
+      cp_g: 1.86
+    
+    else if (opts->calcMethod == "lookup") do
+      // Table 2 lookup
+      cp_da: dryAirSpecificHeat(tDB)
+      
+      // Table 3 lookup
+      cp_g: saturatedWaterVaporSpecificHeat(tDB)
+    else do
+      throw "Unsupported calculation method option; must be one of: \"lookup\", \"approx\"."
+    end
+    
+    // Moist air specific heat [kJ/kg]:
+    /*
+    cp_ma = ΔT / Δm_ma
+    
+    m_ma * cp_ma * ΔT = [m_da * cp_da + m_g * cp_g] * ΔT
+    
+    Substitute for mass quantites:
+    m_ma = (1 + w) * m_da
+    m_g = w * m_da
+    (1 + w) * m_da * cp_ma = m_da * cp_da + w * m_da * cp_g
+    
+    Solve equation for cp_ma:
+    cp_ma = (cp_da + w * cp_g) / (1 + w)
+    */
+    cp_ma: (cp_da + w * cp_g) / (1 + w)
+    
+    // Return
+    cp_ma.as(1kJ/kg°K)
+  end
+---
+name:moistAirSpecificVolume
+doc:
+  Computes moist air specific volume given dry-bulb temperature, humidity ratio, and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'w': Humidity ratio
+  - 'p': Total air pressure
+  
+  Returns
+  -------
+  
+  Moist air specific volume (m³/kg_dry)
+  
+  Notes
+  -----
+  1. *2025 ASHRAE Handbook: Fundamentals* defines specific volume as the volume of a moist air mixture relative to the mass of dry air in the mixture. Therefore, moist air specific volume is *not* the reciprocal of moist air density.
+  2. The ASHRAE unit is 'm³/kg_dry', which does not exist in Project Haystack. (Project Haystack has  no category of units for specific volume.) Therefore, the function outputs the custom unit '_m³/kg_dry'. Automatic unit conversions will not work with this function's output. Because of this limitation, this function is primarily intended for use within other psychrometric functions.
+  
+  References
+  ----------
+  1. Equation (28), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
+src:
+  (tDB, w, p:standardPressure(0m)) => do
+    // Convert to SI units
     tK: tDB.to(1K)
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
     p = p.to(1kPa)
   
     // Remove unit (to avoid computation exceptions)
     tK = tK.as(1)
     p = p.as(1)
-    w = w.as(1)
   
-    // Dry air specific volume [m³/kg]:
-    // Eq. (28), p. 1.9, ASHRAE Fundamentals Handbook (2009), SI Edition
-    v: ( 0.287042 * tK * (1 + 1.607858*w) ) / p
-    
-    // Moist air density [kg/m³]:
-    // Eq. (11), p. 1.8, ASHRAE Fundamentals Handbook (2009), SI Edition
-    rho: ((1 / v)*(1 + w)).as(1kg/m³)
+    // Specific volume [m³/kg_dry]:
+    // Eq. (28), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    v: (0.287042 * tK * (1 + 1.607858*w)) / p
+    v.as("_m³/kg_dry")
   end
-----------------------------------------------------------------------------------------------------
-name:moistAirSpecificHeat
-func
-psychrometrics
-doc:
-  Computes the specific heat of moist air given humidity ratio.
-
-  Parameters
-  ----------
-  
-  - **w:** Humidity ratio
-  
-  Returns
-  -------
-  
-  Specific heat of moist air (J/(kg_dry·K))
-
-  Notes
-  -----
-  1. Per ASHRAE Standard 37, the specific heat of air is used primarily for calculating sensible
-     cooling capacity. Therefore, despite being defined for moist air, it is reported per unit mass
-     of dry air, i.e. per 'kg_dry'. This allows direct use in the various ASHRAE Standard 37
-     capacity equations.
-  2. At this time, SkySpark does not support any unit for specific heat. Therefore, this function
-     returns the custom unit '_J/kg_dry/K'.
-  3. The specific heat of dry air actually varies with temperature, but is approximately 1005
-     J/(kg_dry·K) (the value used in this function) at typical room temperature. Similarly, the
-     specific heat of water vapor also varies with temperature, but this function uses the fixed
-     value 1805 J/(kg·K), following the equations in ASHRAE Standard 37 Section 7.3.3.
-     
-  References
-  ----------
-  1. Section 7.3.3, p. 11, *Methods of Testing for Rating Electrically Driven Unitary
-     Air-Conditioning and Heat Pump Equipment,* ASHRAE Standard 37-2009.
-src:
-  (w) => do
-
-    // Remove unit (to avoid computation exceptions)
-    w = w.as(1)
-
-    // Specific heat of air [J/(kg_dry·K)]:
-    // Section 7.3.3, ASHRAE Standard 37-2009
-    cp: 1005 + 1805*w
-
-    // Return
-    cp.as("_J/kg_dry/K")
-  end
-----------------------------------------------------------------------------------------------------
-name:moistAirEnthalpy
-func
-psychrometrics
-doc:
-  Computes moist air specific enthalpy given dry bulb temperature and humidity ratio. Ported from
-  'Enthalpy_Air_H2O' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
-  
-  - **tDB:** Dry bulb temperature
-  - **w:** Humidity ratio
-  
-  Returns
-  -------
-  
-  Moist air specific enthalpy (kJ/kg)
-
-  Notes
-  -----
-  1. This function returns specific enthalpy in SI units,
-       h = 1.006*tDB + w * (2501 + 1.86*tDB)
-     in which
-     - h = specific enthalpy (kJ/kg),
-     - tDB = dry bulb temperature (°C), and
-     - w = humidity ratio.
-     
-     The equivalent IP calculation is:
-       h = 0.240*tDB + w * (1061 + 0.444*tDB)
-     in which
-     - h = specific enthalpy (BTU/lb),
-     - tDB = dry bulb temperature (°F),
-     - w = humidity ratio.
-     
-     Because SI specific enthalpy is referenced to 0°C and IP specific enthalpy to 0°F, there is
-     the IP quantity is offset from the SI quantity by approximately 17.8 kJ/kg (7.66 BTU/lb).
-     (Note that this offset drifts slightly between the SI and IP approximations depending on the
-     temperature.) To convert the output of this function to IP units, use the approximation:
-       (moistAirEnthalpy(tDB, w) + 17.8kJ/kg).to(BTU/lb)
-  2. SkySpark supports two sets of units for enthalpy: energy per unit mass of *moist air* (e.g.
-     'kJ/kg') and energy per unit mass of *dry air* (e.g. 'kJ/kg_dry'). The SI units are the same,
-     but the interpretation is different. The ASHRAE Fundamentals Handbook, SI Edition, specifies
-     enthalpy kilojoules per kilogram of dry air. Therefore, SkySpark output units are 'kJ/kg_dry'.
-
-  References
-  ----------
-  1. Equation (32), p. 1.9, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-src:
-  (tDB, w) => do
-
-    // Coerce inputs to SI units
-    tDB = tDB.to(1°C)
-
-    // Remove unit (to avoid computation exceptions)
-    tDB = tDB.as(1)
-
-    // Moist air specific enthalpy [kJ/kg]:
-    // Eq. (32), p. 1.9, ASHRAE Fundamentals Handbook (2013), SI Edition
-    h: ( 1.006*tDB + w*(2501 + 1.86*tDB) ).as(1kJ/kg_dry)
-  end
-----------------------------------------------------------------------------------------------------
+---
 name:partialPressure
-func
-psychrometrics
 doc:
-  Computes water vapor partial pressure given ambient pressure and humidity ratio. Ported from 
-  'Part_press' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+  Computes partial pressure of water vapor given humidity ratio and total air pressure.
   
-  - **p:** Ambient pressure
-  - **w:** Humidity ratio
+  Inputs
+  ------
+  
+  - 'w': Humidity ratio
+  - 'p': Total air pressure
   
   Returns
   -------
   
-  Water vapor partial pressure (kPa)
-
+  Partial pressure of water vapor (kPa)
+  
+  Notes
+  -----
+  1. Humidity ratio either must be dimensionless or have units of 'gH₂O/kgAir'.
+  2. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  3. This function is the inverse of `humidityRatio()`.
+  
   References
   ----------
-  1. Equation (38), p. 1.9, *ASHRAE Fundamentals Handbook (2013), SI Edition*
+  1. Equation (21), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
 src:
-  (p, w) => do
-
-    // Coerce inputs to SI units
+  (w, p:standardPressure()) => do
+    // Convert to SI units
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
     p = p.to(1kPa)
-    w = w.to(1)
-
-    // Eq. (38), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.9
-    pW: (p * w / (0.621945 + w)).to(1kPa)
+    
+    // Eq. (21), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition (algebra manipulated)
+    pW: (p * w / (0.621945 + w))
+  
+    // Enforce units
+    pW = pW.as(1kPa)
   end
-----------------------------------------------------------------------------------------------------
+---
+name:propyleneGlycolPropertyFitCoefficients
+func
+nodoc
+psychrometrics
+src:
+  () => do
+    // Coefficients for polynomial fits of propylene glycol + water blend properties as a function of glycol ratio and temperature
+    // Fits from: Å. Melinder, "Properties of Secondary Working Fluids (Secondary Refrigerants or Coolants, Heat Transfer Fluids) for Indirect Systems", 2nd Edition, 2010 (ISBN: 9782913149830)
+    [
+      {property: "density", c00:1018, c01:-0.5406, c02:-0.002666, c03:0.00001347, c10:0.7604, c11:-0.00945, c12:0.00005541, c13:-0.0000001343, c20:-0.002498, c21:0.000027, c22:-0.0000004018, c23:0.000000003376, c30:-0.000155, c31:0.000002829, c32:-0.000000007175, c40:-0.000001131, c41:-0.00000002221, c50:0.00000002342},
+      {property: "dynamicViscosity", c00:0.6837, c01:-0.03045, c02:0.0002525, c03:-0.000001399, c10:0.03328, c11:-0.0003984, c12:0.000004332, c13:-0.0000000186, c20:0.00005453, c21:-0.000000086, c22:-0.00000001593, c23:-0.00000000004465, c30:-0.0000039, c31:0.0000001054, c32:-0.000000001589, c40:-0.00000001587, c41:0.0000000004475, c50:0.000000003564},
+      {property: "freezingPoint", c00:-13.25, c01:-0.0000382, c02:0.0000007865, c03:-0.000000001733, c10:-0.6631, c11:0.000006774, c12:-0.00000006242, c13:-0.0000000007819, c20:-0.01094, c21:0.00000005332, c22:-0.000000004169, c23:0.00000000003288, c30:-0.0002283, c31:-0.00000001131, c32:0.0000000001918, c40:-0.000003409, c41:0.00000000008035, c50:0.00000001465},
+      {property: "specificHeat", c00:3882, c01:2.699, c02:-0.001659, c03:-0.00001032, c10:-13.04, c11:0.0507, c12:-0.00004752, c13:0.000001522, c20:-0.1598, c21:0.00009534, c22:0.00001167, c23:-0.0000000487, c30:0.0003539, c31:0.00003102, c32:-0.000000295, c40:0.00005, c41:-0.0000007135, c50:-0.0000004959},
+      {property: "thermalConductivity", c00:0.4513, c01:0.0007955, c02:0.00000003482, c03:-0.000000005966, c10:-0.004795, c11:-0.00001678, c12:0.00000008941, c13:0.0000000001493, c20:0.00002076, c21:0.0000001563, c22:-0.000000004615, c23:0.000000000009897, c30:-0.00000009083, c31:-0.000000002518, c32:0.00000000006543, c40:-0.0000000005952, c41:-0.00000000003605, c50:0.00000000002104}
+    ].toGrid
+  end
+---
+name:psychSolver
+doc:
+  Given exactly two psychrometric properties of moist air, calculates and returns the other the psychrometric properties at the same psychrometric state.
+  
+  Inputs
+  ------
+  
+  - 'inputStates': Dictionary of input properties (state variables) representing the psychrometric state to be calculated; see *State Variables* below for details
+  - 'p': Total air pressure (Default = standard pressure at sea level, 101.325kPA)
+  - 'opts': Options dictionary; see *Options* below
+  
+  Outputs
+  -------
+  
+  Outputs a dictionary with the following properties of moist air:
+  
+  - 'tDB': Dry-bulb temperature
+  - 'tWB': Wet-bulb temperature
+  - 'tDP': Dew-point temperature
+  - 'rh': Relative humidity
+  - 'w': Humidity ratio
+  - 'h': Specific enthalpy
+  - 'rho': Density
+  - 'pW': Partial pressure of water vapor
+  - 'p': Total air pressure
+  
+  The output states calculated can be limited via the 'outputStates' option.
+  
+  State Variables
+  ---------------
+  
+  'stateVars' is a dictionary that contains exactly two pyschrometric properties (state variables): one used to solve for temperature and one used to solve for humidity. The variable names used in 'stateVars' are the same as for the output dictionary. Supported state variables are:
+  
+  - **Temperature:** 'tDB'
+  - **Humidity:** 'rh', 'w', 'tDP', 'tWB', 'h'
+  
+  Options
+  -------
+  
+  The following control options are supported:
+  
+  - 'debug': Enables debug logging (Default = false)
+  - 'outputStates': List or dict of specific output states to be returned
+    - If a list, values must be strings exactly matching named output states
+    - If a dict, key names must be strings exactly matching named output states (key values are ignored)
+  - 'outputUnits': One of "SI" or "IP" (Default = "SI")
+  
+  In addition, options 'maxIter', 'tol', 'delta', 'checked', and 'debug' will be passed through to any lower-level functions that use numerical solution methods (such as `wetBulb()`). Option 'calcMethod' will be passed through to any lower-level functions that perform enthalpy-based calculations (such as `moistAirSpecificEnthalpy()`).
+  
+  Examples
+  --------
+  
+    // Calculate all psychrometric states from dry bulb temperature and relative humidity, at sea level
+    psychSolver({tDB:20°C, rh:40%RH})  >> {tDB:20.00°C, tDP:6.01°C, pW:0.936kPa, ...}
+  
+    // Calculate wet bulb temperature, in °F, from dry bulb temperature and dew point, at 6000' elevation
+    psychSolver({tDB:55°F, tDP:15°F}, standardPressure(6000ft), {outputStates:["tWB"], outputUnits:"IP"})  >> {tWB: 37.84°F}
+  
+    // Calculate density of moist air given dry bulb temperature, humidity ratio, and measured atmospheric pressure as inputs
+    psychSolver({tDB:42°F, w:0.006}, 329inH₂O, {outputStates:["rho"]})  >> {rho:1.02kg/m³}
+  
+  Notes
+  -----
+  
+  1. Relative humidity 'rh', wet-bulb temperature 'tWB', and specific enthalpy 'h' are all mixed state variables; their values depend on both temperature and humidity. However, determining dry-bulb temperature 'tDB' from these quantities requires numerical methods. Due to this complexity, they are not supported as temperature state variables at this time.
+  2. Solving for wet-bulb temperature 'tWB' requires the use of numerical methods and is therefore slow. If the function is timing out, consider using the 'outputStates' option to omit the wet-bulb temperature calculation.
+func
+psychrometrics
+src:
+  (inputStates, p:standardPressure(), opts:{}) => do
+    
+    ///////////
+    // Setup //
+    ///////////
+  
+    // Default options
+    opts = merge({outputUnits:"SI"}, opts)
+    
+    // Downstream options
+    numericSolverOpts: opts.findAll() (v, n) => contains(["maxIter", "tol", "delta", "checked", "debug"], n)
+    enthalpyCalcOpts: opts.findAll() (v, n) => contains(["calcMethod"], n)
+    
+    // T/F options
+    opts = opts.set("debug", opts.has("debug") and opts->debug != false) // Currently unused
+    
+    // Output states
+    outputStates: ["tDB", "tWB", "tDP", "rh", "w", "h", "rho", "pW", "p"]
+    if (opts.has("outputStates")) do
+      // User-requested outputs
+      if (opts->outputStates.isList) do
+        userOutputStates: opts->outputStates
+      else if (opts->outputStates.isDict) do
+        userOutputStates: opts->outputStates.names
+      else if (opts->outputStates.isStr) do
+        userOutputStates: [opts->outputStates]
+      else do
+        throw "Can't process 'outputStates' option: expected list or dict; found " + debugType(opts->outputStates) + "."
+      end
+      
+      // Filter output states
+      outputStates = userOutputStates.findAll(v => outputStates.contains(v))
+      
+      // Warn if anything was dropped
+      if (outputStates.size != userOutputStates.size) do
+        unsupportedStates: userOutputStates.findAll(v => not outputStates.contains(v))
+        logWarn(
+          "pyschrometrics", "Ignoring unsupported output state(s) " +
+          unsupportedStates.map(v => "\"" + v + "\"").concat(", ") + "."
+        )
+      end
+    end
+    
+    ////////////////
+    // State Vars //
+    ////////////////
+    
+    // Valid states
+    validTemperatureStates: {tDB:"°C"}
+    validHumidityStates: {tWB:"°C", tDP:"°C", rh:"%RH", w:"", h:"kJ/kg_dry"}
+    validStates: validTemperatureStates.merge(validHumidityStates)
+    
+    // Ensure 'inputStates' is a dict
+    if (not inputStates.isDict) do
+      throw "'inputStates' must be a dictionary."
+      
+    // Ensure exactly 2 state variables
+    else if (inputStates.names.size != 2) do
+      throw "'inputStates' must contain exactly 2 input state variables; found " + inputStates.names.size.toStr + "."
+    end
+    
+    // Check for valid input states
+    unsupportedInputs: inputStates.names.findAll() v => not contains(validStates.names, v)
+    if (not unsupportedInputs.isEmpty) do
+      throw "Input state(s) " + unsupportedInputs.map(v => "\"" + v + "\"").concat(", ") + " are not supported."
+    end
+    
+    // Ensure valid temperature state
+    if (not inputStates.hasAny(validTemperatureStates.names)) do
+      throw "Missing input state for temperature. Supported temperature input states are " +
+        validTemperatureStates.names.map(v => "\"" + v + "\"").concat(", ")
+      
+    // Ensure valid humidity state
+    else if (not inputStates.hasAny(validHumidityStates.names)) do
+      throw "Missing input state for humidity. Supported humidity input states are " +
+        validHumidityStates.names.map(v => "\"" + v + "\"").concat(", ")
+    end
+    
+    // Check units
+    checkUnit: (state, val, unit) => try do
+      val.to(unit)
+    catch (ex) do
+      throw "Input state \"" + state + "\" = " + val.toStr + " cannot be converted to unit " + unit + "."
+    end
+    validStates.each() (v, n) => do
+      if (inputStates.has(n)) checkUnit(n, inputStates[n], v)
+    end
+    
+    //////////////////
+    // Calculations //
+    //////////////////
+    
+    // Follows recommendations from Chapter 1, Section 8 in 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    
+    // Initialize outputs (where calcs will be stored)
+    out: inputStates.set("p", p)
+    
+    // Calc dry-bulb temperature (required)
+    if (out.has("tDB")) do
+      null // No action needed
+    else do
+      throw "Insufficient states available to calculate 'tDB'. (This is unexpected; debug your code.)"
+    end
+    
+    // Calc humidity ratio (required)
+    if (out.has("w")) do
+      null // No action needed
+    else if (out.has("rh")) do
+      // Calculate humidity ratio from dry-bulb temp and relative humidity
+      out = out.set("w", humidityRatio2(out->tDB, out->rh, out->p))
+    else if (out.has("tWB")) do
+      // Calculate humidity ratio from dry-bulb and wet-bulb temps
+      out = out.set("w", humidityRatio3(out->tDB, out->tWB, out->p))
+    else if (out.has("tDP")) do
+      // First, calculate partial pressure = saturation pressure at tDP
+      out = out.set("pW", saturationPressure(out->tDP))
+      
+      // Second, calculate humidity ratio from partial pressure
+      out = out.set("w", humidityRatio(out->pW, out->p))
+    else if (out.has("h")) do
+      // Calculate humidity ratio from dry-bulb temp and specific enthalpy
+      out = out.set("w", humidityRatio4(out->tDB, out->h, enthalpyCalcOpts))
+    else do
+      throw "Insufficient states available to calculate 'w'. (This is unexpected; debug your code.)"
+    end
+    
+    // Calc partial pressure of water vapor
+    if (outputStates.contains("pW")) do
+      if (out.has("pW")) do
+        null // No action needed
+      else if (out.has("w")) do
+        out = out.set("pW", partialPressure(out->w, out->p))
+      else do
+        throw "Insufficient states available to calculate 'pW'. (This is unexpected; debug your code.)"
+      end
+    end
+  
+    // Calc wet-bulb temperature
+    if (outputStates.contains("tWB")) do
+      if (out.has("tWB")) do
+        null // No action needed
+      else if (out.has("rh")) do
+        // Calculate wet-bulb temperature via NR algorithm
+        out = out.set("tWB", wetBulb(out->tDB, out->rh, out->p, numericSolverOpts))
+      else if (out.has("w")) do
+        // First, calculate relative humidity
+        out = out.set("rh", relativeHumidity2(out->tDB, out->w, p))
+        
+        // Second, calculate wet-bulb temperature via NR algorithm
+        out = out.set("tWB", wetBulb(out->tDB, out->rh, out->p, numericSolverOpts))
+      else do
+        throw "Insufficient states available to calculate 'tWB'. (This is unexpected; debug your code.)"
+      end
+    end
+    
+    // Calc dew-point temperature
+    if (outputStates.contains("tDP")) do
+      if (out.has("tDP")) do
+        null // No action needed
+      else if (out.has("pW")) do
+        // Calculate dew-point temperature from partial pressure
+        out = out.set("tDP", dewPoint(out->pW))
+      else if (out.has("w")) do
+        // Calculate dew-point temperature from humidity ratio
+        out = out.set("tDP", dewPoint2(out->w, out->p))
+      else do
+        throw "Insufficient states available to calculate 'tDP'. (This is unexpected; debug your code.)"
+      end
+    end
+    
+    // Calc relative humidity
+    if (outputStates.contains("rh")) do
+      if (out.has("rh")) do
+        null // No action needed
+      else if (out.has("pW")) do
+        // Calculate relative humidity from partial pressure
+        out = out.set("rh", relativeHumidity(out->tDB, out->pW))
+      else if (out.has("w")) do
+        // Calculate relative humidity from humidity ratio
+        out = out.set("rh", relativeHumidity2(out->tDB, out->w, out->p))
+      else do
+        throw "Insufficient states available to calculate 'rh'. (This is unexpected; debug your code.)"
+      end
+    end
+    
+    // Calc specific enthalpy
+    if (outputStates.contains("h")) do
+      if (out.has("w")) do
+        // Calculate specific enthalpy from dry-bulb temperature and humidity ratio
+        out = out.set("h", moistAirSpecificEnthalpy(out->tDB, out->w, enthalpyCalcOpts))
+      else do
+        throw "Insufficient states available to calculate 'h'. (This is unexpected; debug your code.)"
+      end
+    end
+    
+    // Calc density
+    if (outputStates.contains("rho")) do
+      if (out.has("w")) do
+        // Calculate density from dry-bulb temperature and humidity ratio
+        out = out.set("rho", moistAirDensity(out->tDB, out->w, out->p))
+      else do
+        throw "Insufficient states available to calculate 'rho'. (This is unexpected; debug your code.)"
+      end
+    end
+    
+    /////////////////////
+    // Post-Processing //
+    /////////////////////
+    
+    // Filter to desired output states
+    out = out.findAll() (v, n) => outputStates.contains(n)
+    
+    // Unit conversion: already SI; only needed for IP
+    if (opts["outputUnits"] == "IP") do
+      // Convert to ASHRAE IP standard units
+      if (out.has("tDB")) out = out.set("tDB", out->tDB.to(1°F))
+      if (out.has("tWB")) out = out.set("tWB", out->tWB.to(1°F))
+      if (out.has("tDP")) out = out.set("tDP", out->tDP.to(1°F))
+      if (out.has("h"))   out = out.set("h",   out->h.specificEnthalpyUnitConvert(1BTU/lb_dry))
+      if (out.has("rho")) out = out.set("rho", out->rho.to(1lb/ft³))
+      if (out.has("pW"))  out = out.set("pW",  out->pW.to(1inH₂O))
+      if (out.has("p"))   out = out.set("p",   out->p.to(1inH₂O))
+      
+      // Note: %RH does not change units and w is unitless
+      
+    end else if (opts["outputUnits"] != "SI") do
+      throw "Unrecognized 'outputUnits' option \"" + opts["outputUnits"] + "\"; must be either \"SI\" or \"IP\"."
+    end
+    
+    // Return
+    out
+    
+  end
+---
 name:relativeHumidity
-func
-psychrometrics
 doc:
-  Computes relative humidity given dry bulb temperature, wet bulb temperature, and ambient pressure.
-  Ported from 'Rel_hum' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+  Computes relative humidity given dry-bulb temperature and partial pressure of water vapor.
   
-  - **tDB:** Dry bulb temperature
-  - **tWB:** Wet bulb temperature
-  - **p:** Ambient pressure
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'pW': Partial pressure of water vapor
   
   Returns
   -------
   
   Relative humidity (%RH)
-
-  Notes
-  -----
-  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure
-     at sea level) is assumed.
-
+  
   References
   ----------
-  1. Equation (24), p. 1.8, *ASHRAE Fundamentals Handbook (2013), SI Edition*
+  1. Equation (13), p. 1.9, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Equation (23), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
 src:
-  (tDB, tWB, p:stdPressure(0m)) => do
-    // Humidity ratio
-    w: humidityRatio(tDB, tWB, p)
-
-    // Water vapor saturation pressure [kPa]
+  (tDB, pW) => do
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    pW = pW.to(1kPa)
+    
+    // Water vapor saturation pressure at dry-bulb temperature
     pWS: saturationPressure(tDB)
-
-    // Water vapor partial pressure [kPa]
-    pW: partialPressure(p, w)
-
-    // Relative humidity: Eq. (24), p. 1.8, ASHRAE Fundamentals Handbook (2013), SI Edition
+    
+    // Eq. (23), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition
     rh: pW / pWS
-
+  
     // Coerce to percent RH
-    (100*rh).to(1%RH)
+    (100*rh).as(1%RH)
   end
-----------------------------------------------------------------------------------------------------
+---
 name:relativeHumidity2
-func
-psychrometrics
 doc:
-   Computes relative humidity given dry bulb temperature, humidity ratio, and ambient pressure.
-   Ported from 'Rel_hum2' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+  Computes relative humidity given dry-bulb temperature, humidity ratio, and total air pressure.
   
-  - **tDB:** Dry bulb temperature
-  - **w:** Humidity ratio
-  - **p:** Ambient pressure
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'w': Humidity ratio
+  - 'p': Total air pressure
   
   Returns
   -------
   
   Relative humidity (%RH)
-
+  
   Notes
   -----
-  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure
-     at sea level) is assumed.
-
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  
   References
   ----------
-  1. Equation (24), p. 1.8, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-src:
-  (tDB, w, p:stdPressure(0m)) => do
-    // Water vapor saturation pressure [kPa]
-    pWS: saturationPressure(tDB)
-
-    // Water vapor partial pressure [kPa]
-    pW: partialPressure(p, w)
-
-    // Relative humidity: Eq. (24), p. 1.8, ASHRAE Fundamentals Handbook (2013), SI Edition
-    rh: pW / pWS
-
-    // Coerce to percent RH
-    (100*rh).to(1%RH)
-  end
-----------------------------------------------------------------------------------------------------
-name:saturationPressure
+  See documentation for `relativeHumidity()` and `partialPressure()`
 func
 psychrometrics
+src:
+  (tDB, w, p:standardPressure())  => do
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    if (w.unit == "gH₂O/kgAir") do
+      w = (w / 1000).as(1)
+    else do
+      w = w.as(1)
+    end
+    p = p.to(1kPa)
+    
+    // Calculate partial pressure
+    pW: partialPressure(w, p)
+    
+    // Calculate relative humidity from partial pressure
+    relativeHumidity(tDB, pW)
+  end
+---
+name:relativeHumidity3
 doc:
-  Computes water vapor saturation pressure given ambient temperature. Ported from 'Sat_press' VBA
-  function in Eric Kozubal's psychrometrics spreadsheet.
-
-  Parameters
-  ----------
+  Computes relative humidity given dry-bulb temperature, wet-bulb temperature, and total air pressure.
   
-  - **t:** Ambient temperature
+  Inputs
+  ------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'tWB': Wet-bulb temperature
+  - 'p': Total air pressure
+  
+  Returns
+  -------
+  
+  Relative humidity (%RH)
+  
+  Notes
+  -----
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  
+  References
+  ----------
+  See documentation for `relativeHumidity()`, `partialPressure()`, and `humidityRatio3()`
+func
+psychrometrics
+src:
+  (tDB, tWB, p:standardPressure())  => do
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    tWB = tWB.to(1°C)
+    p = p.to(1kPa)
+    
+    // Humidity ratio
+    w: humidityRatio3(tDB, tWB, p)
+    
+    // Calculate partial pressure
+    pW: partialPressure(w, p)
+    
+    // Calculate relative humidity from partial pressure
+    relativeHumidity(tDB, pW)
+  end
+---
+name:saturatedWaterVaporSpecificHeat
+doc:
+  Returns the specific heat capacity of saturated water vapor using a lookup from Table 3 in the *2025 ASHRAE Handbook: Fundamentals*, SI Edition.
+  
+  Inputs
+  ------
+  
+  - 't': Temperature
+  
+  Returns
+  -------
+  
+  Specific heat of saturated water vapor (kJ/kg°K)
+  
+  Notes
+  -----
+  
+  1. To increase computational efficiency, a sampled version of Table 3 is used for the lookup.
+  
+  References
+  ----------
+  1. Table 3, pp. 1.5-1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
+src:
+  (t) => do
+    // Convert to SI units
+    t = t.to(1°C)
+    
+    // Range check
+    if (t > 100°C) do
+      throw "t > 100°C; this lookup function is valid only between -60°C and 100°C"
+    else if (t < -60°C) do
+      throw "t < -60°C; this lookup function is valid only between -60°C and 100°C"
+    end
+    
+    // Lookup table: Sampled from Table 3, pp. 1.5-1.8, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    cPWV_table: [
+      {t: -60°C, cpg:1.8522}, 
+      {t: -55°C, cpg:1.8527}, 
+      {t: -50°C, cpg:1.8534}, 
+      {t: -45°C, cpg:1.8542}, 
+      {t: -40°C, cpg:1.8552}, 
+      {t: -35°C, cpg:1.8566}, 
+      {t: -30°C, cpg:1.8583}, 
+      {t: -25°C, cpg:1.8606}, 
+      {t: -20°C, cpg:1.8635}, 
+      {t: -15°C, cpg:1.8672}, 
+      {t: -10°C, cpg:1.8719}, 
+      {t:  -5°C, cpg:1.8775}, 
+      {t:   0°C, cpg:1.8882}, 
+      {t:  5°C,  cpg:1.8917}, 
+      {t:  10°C, cpg:1.8957}, 
+      {t:  15°C, cpg:1.9004}, 
+      {t:  20°C, cpg:1.9057}, 
+      {t:  25°C, cpg:1.9116}, 
+      {t:  30°C, cpg:1.9180}, 
+      {t:  35°C, cpg:1.9249}, 
+      {t:  40°C, cpg:1.9322}, 
+      {t:  45°C, cpg:1.9400}, 
+      {t:  50°C, cpg:1.9482}, 
+      {t:  55°C, cpg:1.9570}, 
+      {t:  60°C, cpg:1.9664}, 
+      {t:  65°C, cpg:1.9764}, 
+      {t:  70°C, cpg:1.9873}, 
+      {t:  75°C, cpg:1.9990}, 
+      {t:  80°C, cpg:2.0119}, 
+      {t:  85°C, cpg:2.0260}, 
+      {t:  90°C, cpg:2.0415}, 
+      {t:  95°C, cpg:2.0586}, 
+      {t: 100°C, cpg:2.0775}
+    ].toGrid
+    
+    // Find interpolation rows
+    index: cPWV_table.eachWhile() (row, i) => do
+      // Return first row where the temperature value is larger than input temperature
+      if (row->t > t) do
+        return i
+      end
+    end
+    lo: cPWV_table[index - 1]
+    hi: cPWV_table[index]
+    
+    // Interpolate
+    val: hi->cpg - ((hi->cpg - lo->cpg) / (hi->t - lo->t).as(1)) * (hi->t - t).as(1)
+    
+    // Return
+    val.as("kJ/kg°K")
+  end
+---
+name:saturationHumidityRatio
+doc:
+  Computes the saturation humidity ratio (the humidity ratio of saturated moist air) for a given temperature and total air pressure.
+  
+  Inputs
+  ------
+  
+  - 't': Temperature
+  - 'p': Total air pressure
+  
+  Returns
+  -------
+  
+  Saturation humidity ratio (unitless)
+  
+  Notes
+  -----
+  1. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  2. The output saturation humidity ratio is unitless (kg/kg or lb/lb). SkySpark also supports the units 'g/kg' and 'gH₂O/kgAir'; to convert the output of this function to one of these units first multiply by 1000.
+  
+  References
+  ----------
+  1. Equation (5)-(6), p. 1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+  2. Equation (22), p. 1.10, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
+src:
+  (t, p:standardPressure()) => do
+    // Convert to SI units
+    t = t.to(1°C)
+    p = p.to(1kPa)
+    
+    // Saturation pressure of water vapor
+    pWS: saturationPressure(t)
+    
+    // Eq. (22), p. 1.10, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    wS: humidityRatio(pWS, p)
+  
+    // Coerce to unitless quantity [kg/kg]
+    wS = wS.as(1)
+  end
+---
+name:saturationPressure
+doc:
+  Computes water vapor saturation pressure given ambient temperature.
+  
+  Inputs
+  ------
+  
+  - 't': Ambient temperature
   
   Returns
   -------
   
   Water vapor saturation pressure (kPa)
-
+  
   References
   ----------
-  1. Equations (5)-(6), p. 1.2, *ASHRAE Fundamentals Handbook (2013), SI Edition*
+  1. Equation (5)-(6), p. 1.8, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
 src:
   (t) => do
-
+    // Convert temperature to SI units (°C)
+    t = t.to(1°C)
+    
+    // Range check
+    if (t > 373.946°C) do
+      throw "t > 373.946°C; this function is valid only between -223.15°C and 373.946°C"
+    else if (t < -223.15°C) do
+      throw "t < -223.15°C; this function is valid only between -223.15°C and 373.946°C"
+    end
+    
     // Compute temperature in Kelvin
     tK: t.to(1K)
-
+  
     // Remove unit (to avoid computation exceptions)
     // (We still know the unit is actually Kelvin)
     tK = tK.as(1)
-
-    // Coefficients, ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.2
-    c01: -5.6745359E3
-    c02: 6.3925247E0
-    c03: -9.6778430E-3
-    c04: 6.2215701E-7
-    c05: 2.0747825E-9
-    c06: -9.4840240E-13
-    c07: 4.1635019E0
-
-    c08: -5.8002206E3
-    c09: 1.3914993E0
-    c10: -4.8640239E-2
-    c11: 4.1764768E-5
-    c12: -1.4452093E-8
-    c13: 6.5459673E0
-
-    if (t.to(1°C) < 0°C) do
-      // Over ice: Eq. (5), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.2
-      pWS: exp(
-        c01/tK + c02 + c03*tK + c04*pow(tK,2) + c05*pow(tK,3) + c06*pow(tK,4) + c07*logE(tK)
-        ).as(1Pa)
+    
+    // Over liquid water: Eq. (5) p. 1.8, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    if (t >= 0°C) do
+      // Coefficients, p. 1.8, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      n1  :  0.11670521452767E+04
+      n2  : -0.72421316703206E+06
+      n3  : -0.17073846940092E+02
+      n4  :  0.12020824702470E+05
+      n5  : -0.32325550322333E+07
+      n6  :  0.14915108613530E+02
+      n7  : -0.48232657361591E+04
+      n8  :  0.40511340542057E+06
+      n9  : -0.23855557567849E+00
+      n10 :  0.65017534844798E+03
+    
+      // Theta parameter
+      theta: tK + n9 / (tK - n10)
+      
+      // A, B, C terms
+      capA:    theta.pow(2) + n1 * theta + n2 
+      capB: n3*theta.pow(2) + n4 * theta + n5
+      capC: n6*theta.pow(2) + n7 * theta + n8
+      
+      // Eq. (5)
+      pWS: 1000 * ((2 * capC) / (-1 * capB + (capB.pow(2) - 4*capA*capC).pow(0.5))).pow(4)
+      
+    // Over ice: Eq. (6) p. 1.8, 2025 ASHRAE Handbook: Fundamentals, SI Edition
     else do
-      // Over liquid water: Eq. (6), ASHRAE Fundamentals Handbook (2013), SI Edition, p. 1.2
-      pWS: exp(
-        c08/tK + c09 + c10*tK + c11*pow(tK,2) + c12*pow(tK,3) + c13*logE(tK)
-        ).as(1Pa)
+      // Coefficients, p. 1.8, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+      a1  : -0.212144006E+02
+      a2  :  0.273203819E+02
+      a3  : -0.610598130E+01
+      b1  :  0.333333333E-02
+      b2  :  0.120666667E+01
+      b3  :  0.170333333E+01
+  
+      // Theta parameter
+      theta: tK / 273.16
+      
+      // Eq. (6)
+      pWS: 0.611657 * exp(1 / theta * (a1 * theta.pow(b1) + a2 * theta.pow(b2) + a3 * theta.pow(b3)))
     end
-
+  
     // Return
-    pWS.to(1kPa)
+    pWS.as(1kPa)
   end
-----------------------------------------------------------------------------------------------------
-name:stdPressure
+---
+name:specificEnthalpyUnitConvert
+doc:
+  Converts a specific enthalpy 'val' to the given 'outputUnit'.
+  
+  In HVAC calculations, specific enthalpy has an arbitrary zero point. In SI units, the zero point is 0°C; in IP units it is 0°F. The offset between the IP and SI quantities for enthalpy is equal to the SI specific enthalpy evaluated at 0°F (-17.7778°C):
+  
+  - Per the *2025 ASHRAE Handbook: Fundamentals*, the specific enthalpy of dry air at -17°C is -17.095 kJ/kg and at -18°C is -18.1 kJ/kg
+  - Interpolating between the two values, the estimated offset at -17.7778°C is -17.876689 kJ/kg
+  
+  This function applies the offset automatically, in the correct direction, when converting between SI and IP units of specific enthalpy.
+  
+  *Note: there is a proposal to update the Haystack unit database to handle this offset within the unit conversion logic. This function will continue to work as expected regardless of future changes to the Haystack unit database.*
 func
 psychrometrics
+src:
+  (val, outputUnit) => do
+    // Input unit
+    inputUnit: val.unit
+    
+    // Output unit
+    if (outputUnit.isNumber) outputUnit = outputUnit.unit
+    
+    // Recognized units
+    siUnits: ["J/g", "J/kg", "J/kg_dry", "kJ/kg", "kJ/kg_dry", "MJ/kg_dry"]
+    ipUnits: ["BTU/lb", "btu/lb_dry", "BTU/lb_dry", "kBTU/lb", "kBTU/lb_dry"]
+    
+    // Input system
+    if (siUnits.contains(inputUnit)) do
+      inputSystem: "SI"
+    else if (ipUnits.contains(inputUnit)) do
+      inputSystem: "IP"
+    else do
+      throw "Did not recognize input unit " + inputUnit + " as either an SI or IP unit of enthalpy supported by SkySpark."
+    end
+  
+    // Output system
+    if (siUnits.contains(outputUnit)) do
+      outputSystem: "SI"
+    else if (ipUnits.contains(outputUnit)) do
+      outputSystem: "IP"
+    else do
+      throw "Did not recognize output unit " + outputUnit + " as either an SI or IP unit of enthalpy supported by SkySpark."
+    end
+    
+    // Convert and return
+    if (inputSystem == outputSystem) do
+      val.to(outputUnit)
+      
+    else if (inputSystem == "SI" and outputSystem == "IP") do
+      ((val.to(1J/kg) + 17876.689J/kg) / 2325.55761).as(1BTU/lb).to(outputUnit)
+      
+    else if (inputSystem == "IP" and outputSystem == "SI") do
+      ((val.to(1BTU/lb) * 2325.55761).as(1J/kg) - 17876.689J/kg).to(outputUnit)
+    end 
+  end
+---
+name:standardPressure
 doc:
-  Computes standard atmospheric pressure given elevation. If no elevation is specified, sea level
-  is assumed. Ported from 'STD_Press' VBA function in Eric Kozubal's psychrometrics spreadsheet.
+  Computes standard atmospheric pressure given elevation. If no elevation is specified, sea level is assumed. 
   
-  Parameters
-  ----------
+  Inputs
+  ------
   
-  - **elev:** Elevation
+  - 'elev': Elevation
   
   Returns
   -------
   
   Standard atmospheric pressure (kPa)
-
+  
   References
   ----------
-  1. Equation (3), p. 1.1, *ASHRAE Fundamentals Handbook (2013), SI Edition*
+  1. Equation (3), p. 1.1, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
+func
+psychrometrics
 src:
   (elev:0m) => do
-
-    // Coerce elevation to SI units
+    // Convert elevation to SI units
     elev = elev.to(1m)
-
+    
+    // Range check
+    if (elev < -5000m) do
+      throw "elev < -5,000m; this function is valid only between -5,000m and 11,000m"
+    else if (elev > 11000m) do
+      throw "elev > 11,000m; this function is valid only between -5,000m and 11,000m"
+    end
+    
     // Remove unit (to avoid computation exceptions)
     elev = elev.as(1)
-
-    // Eq. (3), p. 1.1, ASHRAE Fundamentals Handbook (2013), SI Edition
+  
+    // Eq. (3), p. 1.1, 2025 ASHRAE Handbook: Fundamentals, SI Edition
     p: 101.325 * (1 - elev*2.25577E-5).pow(5.2559)
-
+  
     // Return
     p.as(1kPa)
   end
-----------------------------------------------------------------------------------------------------
-name:stdTemp
-func
-psychrometrics
+---
+name:standardTemp
 doc:
-  Computes standard atmospheric temperature given elevation. If no elevation is specified, sea level
-  is assumed. Ported from 'STD_Temp' VBA function in Eric Kozubal's psychrometrics spreadsheet.
+  Computes standard atmospheric temperature given elevation. If no elevation is specified, sea level is assumed. 
   
-  Parameters
-  ----------
+  Inputs
+  ------
   
-  - **elev:** Elevation
+  - 'elev': Elevation
   
   Returns
   -------
@@ -626,26 +2010,42 @@ doc:
   
   References
   ----------
-  1. Equation (4), p. 1.1, *ASHRAE Fundamentals Handbook (2013), SI Edition*
-src:
-  (elev:0m) => do
-
-    // Coerce elevation to SI units
-    elev = elev.to(1m)
-
-    // Remove unit (to avoid computation exceptions)
-    elev = elev.as(1)
-
-    // Eq. (3), p. 1.1, ASHRAE Fundamentals Handbook (2013), SI Edition
-    p: 15 - 0.0065*elev
-
-    // Return
-    p.as(1°C)
-  end
-----------------------------------------------------------------------------------------------------
-name:waterDensity
+  1. Equation (4), p. 1.2, *2025 ASHRAE Handbook: Fundamentals*, SI Edition
 func
 psychrometrics
+src:
+  (elev:0m) => do
+    // Convert elevation to SI units
+    elev = elev.to(1m)
+    
+    // Range check
+    if (elev < -5000m) do
+      throw "elev < -5,000m; this function is valid only between -5,000m and 11,000m"
+    else if (elev > 11000m) do
+      throw "elev > 11,000m; this function is valid only between -5,000m and 11,000m"
+    end
+    
+    // Remove unit (to avoid computation exceptions)
+    elev = elev.as(1)
+  
+    // Eq. (4), p. 1.1, 2025 ASHRAE Handbook: Fundamentals, SI Edition
+    t: 15 - 0.0065*elev
+  
+    // Return
+    t.as(1°C)
+  end
+---
+name:stdPressure
+func
+nodoc
+psychrometrics
+src:
+  (elev:0m) => do
+    logWarn("pyschrometrics", "stdPressure() is deprecated; use standardPressure() instead.")
+    standardPressure(elev)
+  end
+---
+name:waterDensity
 doc:
   Approximates the density of pure liquid water as a function of temperature. Models are
   fit from reference data in Table 13.2 of Wagner and Pruß (2002) and are valid within 0.1%
@@ -653,55 +2053,50 @@ doc:
   
   Parameters
   ----------
-
-  - **t:** Water temperature
-  - **p:** Water pressure
-
+  
+  - 't': Water temperature
+  - 'p': Water pressure
+  
   Returns
   -------
-
+  
   Water density (kg/m³)
-
+  
   Notes
   -----
-  1. If no pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at
-     sea level) is assumed.
-  2. Note that at this time there is no IP unit for density supported by SkySpark. Therefore,
-     converting the output of this function to IP requires some shenanigans. For instance, to
-     convert to (lb/ft³) use:
-       waterDensity(t).as(1) * 1kg.to(1lb) / 1m³.to(1ft³)
-     This gets you the custom unit '_lb/ft³'.
-     
+  1. If no pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  2. There are no IP units for density currently defined in Project Haystack.
+  
   References
   ----------
   1. W. Wagner and A. Pruß, "The IAPWS Formulation 1995 for the Thermodynamic Properties of
      Ordinary Water Substance for General and Scientific Use," *Journal of Physical and Chemical
      Reference Data*, vol. 31, no. 2, pp. 387-535, 2002.
+func
+psychrometrics
 src:
-  (t, p:stdPressure(0m)) => do
+  (t, p:standardPressure()) => do
     // Coerce inputs to SI units
     t = t.to(1K)
     p = p.to(1kPa)
-
+  
     // Pressure to MPa (not a SkySpark-supported unit)
     p = (p / 1000).as("")
-     
+  
     // Proxy variable based on temperature
     s: sqrt((t/273)-1)
-    
+  
     // Fitted model coefficients
-    a: [999.848, -2.63339, 63.7589, -285.047, 0.465935] 
-    
+    a: [999.848, -2.63339, 63.7589, -285.047, 0.465935]
+  
     // Calcs
-    dens: a[0] + a[1]*s + a[2]*pow(s,2) + a[3]*pow(s,3) + a[4]*p
-
+    rho: a[0] + a[1]*s + a[2]*pow(s,2) + a[3]*pow(s,3) + a[4]*p
+  
     // Output
-    dens.as(1kg/m³)
+    rho.as(1kg/m³)
   end
-----------------------------------------------------------------------------------------------------
+---
 name:waterSpecificHeat
-func
-psychrometrics
 doc:
   Approximates the specific heat of pure liquid water as a function of temperature. Models are
   fit from reference data in Table 13.2 of Wagner and Pruß (2002) and are valid within 0.1%
@@ -709,15 +2104,15 @@ doc:
   
   Parameters
   ----------
-
-  - **t:** Water temperature
-  - **p:** Water pressure
-
+  
+  - 't': Water temperature
+  - 'p': Water pressure
+  
   Returns
   -------
-
-  Water density (kg/m³)
-
+  
+  Water specific heat (J/kg°K)
+  
   Notes
   -----
   1. If no pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at
@@ -725,51 +2120,49 @@ doc:
   2. The SkySpark unit of specific heat is, somewhat confusingly, *J/kg°K*, although the
      SI units for energy, mass, and absolute temperature are *J*, *kg*, and *K*, respectively.
      (Note the lack of *°*.)
-  3. There is no IP unit for specific heat defined in SkySpark.
-     
+  3. There are no IP units for specific heat currently defined in Project Haystack.
+  
   References
   ----------
   1. W. Wagner and A. Pruß, "The IAPWS Formulation 1995 for the Thermodynamic Properties of
      Ordinary Water Substance for General and Scientific Use," *Journal of Physical and Chemical
      Reference Data*, vol. 31, no. 2, pp. 387-535, 2002.
+func
+psychrometrics
 src:
-  (t, p:stdPressure(0m)) => do
+  (t, p:standardPressure()) => do
     // Coerce inputs to SI units
     t = t.to(1K)
     p = p.to(1kPa)
-
+  
     // Pressure to MPa (not a SkySpark-supported unit)
     p = (p / 1000).as("")
-     
+  
     // Proxy variable based on temperature
     s: sqrt((t/273)-1)
-    
+  
     // Fitted model coefficients
     a: [4.21931, 0.0581587, -1.97658, 7.05209, -9.99348, 5.69867, -0.00423423, 0.00351974]
-
+  
     // Calcs
     cp: a[0] + a[1]*s + a[2]*pow(s,2) + a[3]*pow(s,3) + a[4]*pow(s,4) + a[5]*pow(s,5) + a[6]*p + a[7]*s*p
-
+  
     // Output
     (1000*cp).as(1J/kg°K)
   end
-----------------------------------------------------------------------------------------------------
+---
 name:wetBulb
-func
-psychrometrics
 doc:
-  Computes wet-bulb temperature given dry bulb temperature, relative humidity, and ambient pressure.
-  Uses Newton-Raphson (NR) method to converge to correct wet bulb temperature, typically within 2-3
-  iterations. Ported from 'Wet_bulb' VBA function in Eric Kozubal's psychrometrics spreadsheet.
-
+  Computes wet-bulb temperature given dry bulb temperature, relative humidity, and ambient pressure. Uses a modified Newton-Raphson (NR) method to converge to correct wet-bulb temperature, typically within 2-3 iterations.
+  
   Parameters
   ----------
   
-  - **tDB:** Dry bulb temperature
-  - **rh:** Relative humidity
-  - **p:** Ambient pressure
-  - **opts:** A dict of control options; see *Options*
-
+  - 'tDB': Dry-bulb temperature
+  - 'rh': Relative humidity
+  - 'p': Total air pressure
+  - 'opts': Dictionary of control options; see *Options*
+  
   Options
   -------
   
@@ -778,94 +2171,174 @@ doc:
   - 'maxIter': Maximum Newton-Raphson iterations (Default = 5)
   - 'tol': Relative tolerance target; applied to calculated humidity ratios (Default = 1E-5)
   - 'delta': Delta for computing derivative (Default = 0.001Δ°C)
-  - 'checked': Governs action if tolerance is not met: if true, throw exception; if false return NA
-    (Default = false)
-
+  - 'checked': Governs action if tolerance is not met: if true, throw exception; if false return NA (Default = false)
+  - 'debug': Enables debug logging for Newton-Raphson algorithm (Default = false)
+  
   Returns
   -------
   
   Wet bulb temperature (°C)
-
+  
   Notes
   -----
-  1. This function computes the correct wet bulb temperature numerically by comparing output from
-     `humidityRatio` and `humidityRatio2`. Iterations terminate when the two humidity ratio
-     calculations match within absolute tolerance 'tol' or after 'maxIter' iterations, whichever
-     comes first.
-  2. Since Axon has no while loop construct, this function uses a recursive approach.
-  3. Set option 'checked' to true to throw an exception if the function does not terminate with the
-     two humidity ratios within the specified tolerance. The default value of 'checked:false' causes
-     the function to return NA if the humidity ratios do not match within tolerance.
-  4. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure
-     at sea level) is assumed.
-
+  1. This function computes the correct wet bulb temperature numerically by comparing output from `humidityRatio2` and `humidityRatio3`. Iterations terminate when the two humidity ratio calculations match within absolute tolerance 'tol' or after 'maxIter' iterations, whichever comes first.
+  2. If the algorithm does not converge within 'maxIter' iterations, the function will throw an error (if 'checked' = true) or return NA (if 'checked' = false).
+  3. Because Axon has no while loop construct, this function uses recursion.
+  4. If no ambient pressure is specified, a pressure of 101.325 kPa (standard atmospheric pressure at sea level) is assumed.
+  
   References
   ----------
-  See documentation for `humidityRatio` and `humidityRatio2`.
+  See documentation for `humidityRatio2()` and `humidityRatio3()`
+func
+psychrometrics
 src:
-  (tDB, rh, p:stdPressure(0m), opts:{maxIter:5, tol:1E-5, delta:0.001Δ°C, checked:false}) => do
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Setup
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    
+  (tDB, rh, p:standardPressure(0m), opts:{}) => do
+  
+    ///////////
+    // Setup //
+    ///////////
+  
     // Default options
-    if (opts.missing("maxIter")) opts = opts.set("maxIter", 5)
-    if (opts.missing("tol"))     opts = opts.set("tol", 1E-5)
-    if (opts.missing("delta"))   opts = opts.set("delta", 0.001Δ°C)
-    if (opts.missing("checked")) opts = opts.set("checked", false)
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // NR Update Function
-    //////////////////////////////////////////////////////////////////////////////////////////////////
+    opts = merge({maxIter:5, tol:1E-5, delta:0.001Δ°C, checked:false, debug:false}, opts)
+    
+    // T/F options
+    opts = opts.set("checked", opts.has("checked") and opts->checked != false)
+    opts = opts.set("debug",   opts.has("debug")   and opts->debug   != false)
+    
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    rh = rh.to(1%RH)
+    
+    ///////////////////////////
+    // Newton-Raphson Update //
+    ///////////////////////////
+    
     wetBulbUpdate: (tWB, iter) => do
-      // Note: 'tDB', 'rh', 'p', 'wTarget', and 'opts' from outer scope
-
+      // Note: 'tDB', 'rh', 'p', 'wTarget', and 'opts' from outer scope (below)
+  
       // Compute humidity ratio from current value of tWB
-      w: humidityRatio(tDB, tWB, p)
-
+      w1: humidityRatio3(tDB, tWB, p)
+  
+      // Debug log
+      if (opts->debug) do
+        debugStr:
+          "Wet-bulb temperature Newton-Raphson iteration... " + 
+          "iter: "    + iter.toStr    + ", " +
+          "tDB: "     + tDB.toStr     + ", " +
+          "tWB: "     + tWB.toStr     + ", " +
+          "tDP:  "    + tDP.toStr     + ", " +
+          "w: "       + w1.toStr      + ", " +
+          "wTarget: " + wTarget.toStr + ", " + 
+          "error: "   + (wTarget - w1).toStr
+        logDebug("psychrometrics", debugStr)
+      end
+  
       // Check convergence
-      if (abs(wTarget - w) <= opts->tol) return tWB
-
-      // Check maximum iterations; return NA if exceeded
+      if (abs(wTarget - w1) <= opts->tol) return tWB
+  
+      // Check maximum iterations; throw error if exceeded
       iter = iter + 1;
-      if (iter > opts->maxIter) return na()
-
+      if (iter > opts->maxIter) do
+        "Newton-Raphson algorithm failed to converge within " + maxIter.toStr + " iterations."
+      end
+  
       // NR Update...
-
+  
       // Approximate dw / dtWB
-      w2: humidityRatio(tDB, tWB - opts->delta, p)
-      dwdt: (w - w2).as(1) / opts->delta.as(1)
-
+      w2: humidityRatio3(tDB, tWB - opts->delta, p)
+      dwdt: (w1 - w2).as(1) / opts->delta.as(1)
+  
       // Perform update
-      tWB = tWB + ( (wTarget - w) / dwdt ).as(1Δ°C)
-
+      tWB = tWB + ((wTarget - w1) / dwdt).as(1Δ°C)
+  
       // Call recursion (iterate)
       tWB = wetBulbUpdate(tWB, iter)
     end
-
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-    // Main
-    //////////////////////////////////////////////////////////////////////////////////////////////////
-
-    // Coerce inputs to SI units
-    tDB = tDB.to(1°C)
-    rh = rh.to(1%RH)
-    p = p.to(1kPa)
-
+  
+    //////////
+    // Main //
+    //////////
+    
     // Target humidity ratio
     wTarget: humidityRatio2(tDB, rh, p)
-
-    // Initial guess for wet bulb temperature
-    tWB: tDB
-
+    
+    // Dew-point temperature
+    tDP: dewPoint2(wTarget, p)
+    
+    // Initial guess for wet-bulb temperature based on dry-bulb and dew-point temperatures
+    tWB: tDB - 0.5 * (tDB - tDP) * (1 - (rh / 100%RH).as(1))
+  
     // Perform Newton-Raphson iteration
-    // Will return NA if max. iterations exceeded
-    tWB = wetBulbUpdate(tWB, 0)
-
-    // Throw exception if result is checked
-    if (opts->checked and tWB == na()) throw "Newton-Raphson algorithm failed to converge."
-
+    try do
+      tWB = wetBulbUpdate(tWB, 0)
+    catch (ex) do
+      if (opts->checked) do
+        throw ex
+      else do
+        return na()
+      end
+    end
+  
     // Return
     tWB
+  end
+---
+name:wetBulbStull
+doc:
+  Computes wet-bulb temperature given dry bulb temperature and relative humidity using the [Stull approximation]`https://doi.org/10.1175/JAMC-D-11-0143.1`. **The Stull approximation is only valid for sea level elevation.** Quoting from the original paper:
+  
+  > This equation is valid for relative humidities between 5% and 99% and for air temperatures between −20° and 50°C, except for situations having both low humidity and cold temperature. Over the valid range, errors in wet-bulb temperature range from −1° to +0.65°C, with mean absolute error of less than 0.3°C.
+  
+  Parameters
+  ----------
+  
+  - 'tDB': Dry-bulb temperature
+  - 'rh': Relative humidity
+  
+  Returns
+  -------
+  
+  Wet bulb temperature (°C)
+  
+  References
+  ----------
+  1. Roland Stull, "Wet-Bulb Temperature from Relative Humidity and Air Temperature", *Journal of Applied Meteorology and Climatology*, Vol. 50, No. 11, pp. 2267-2269, November 2011
+func
+psychrometrics
+src:
+  (tDB, rh) => do
+    // Convert to SI units
+    tDB = tDB.to(1°C)
+    rh = rh.to(1%RH)
+    
+    // Range check
+    if (tDB > 50°C) do
+      throw "tDB > 50°C; the Stull approximation is valid only between -20°C and 50°C"
+    else if (tDB < -20°C) do
+      throw "tDB < -20°C; the Stull approximation is valid only between -20°C and 50°C"
+    else if (rh < 5%RH) do
+      throw "rh < 5%RH; the Stull approximation is valid only between 5%RH and 99%RH"
+    else if (rh > 99%RH) do
+      throw "rh > 99%RH; the Stull approximation is valid only between 5%RH and 99%RH"
+    end
+    
+    // Remove units (to avoid computation exceptions)
+    // (Known units are still [°C] and [%RH])
+    tDB = tDB.as(1)
+    rh = rh.as(1)
+    
+    // Check the low-temp, low-humidity invalid "corner"
+    if ((70 * tDB) + (30 * rh) - 850 < 0) do
+      throw "The Stull approximation is not valid for the selected tDB and rh values; see Figure 3 in original article."
+    end
+    
+    // Calculate wet bulb temperature
+    tWB: tDB * atan(0.151977 * pow(rh + 8.313659, 0.5))
+      + atan(tDB + rh)
+      - atan(rh - 1.676331)
+      + 0.00391838 * pow(rh, 1.5) * atan(0.023101 * rh)
+      - 4.686035
+    
+    // Units and return
+    tWB.as(1°C)
   end

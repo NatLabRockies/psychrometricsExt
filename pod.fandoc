@@ -2,10 +2,15 @@ Overview [#over]
 ****************
 
 The Pyschrometrics extension provides a set of functions for basic
-[psychrometric]`http://en.wikipedia.org/wiki/Psychrometrics` calculations
-implemented in Axon. These functions were ported to SkySpark by Stephen Frank
-from Excel VBA macros originally written by Eric Kozubal.
+[psychrometric]`http://en.wikipedia.org/wiki/Psychrometrics` and related
+calculations implemented in Axon. Credit goes to Eric Kozubal for providing the
+Microsoft Excel VBA macros originally used to create this extension.
 
-Functions are individually documented. See also the
-[psychrometricsExt]`https://github.com/NREL/psychrometricsExt/releases/`
+The `psychSolver()` function is a flexible "one stop shop" for calculating most
+pyschrometric properties supported by this extension. (Thank you to James Donson
+for the inspiration for and initial implementation of this function.) Other,
+lower-level functions calculate specific properties of moist air, liquid water,
+and glycol-water mixtures. The functions are individually documented.
+
+See also the [psychrometricsExt]`https://github.com/NREL/psychrometricsExt/`
 repository on GitHub for a change log.
