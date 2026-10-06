@@ -34,6 +34,8 @@ This file tracks notable changes to **psychrometricsExt**. The format is based o
   blend (mixture) for a specific glycol concentration and fluid temperature
 - `specificEnthalpyUnitConvert()` convert between SI and IP units of specific
   enthalpy, automatically handling the difference in the zero reference point
+- Logged messages now include the `funcTrace` tag to make it easier to find the
+  source of the message (e.g. when troubleshooting warnings).
 
 ### Changed
 
