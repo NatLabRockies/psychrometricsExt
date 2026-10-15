@@ -2076,6 +2076,7 @@ src:
   end
 ---
 name:stdPressure
+deprecated
 func
 nodoc
 overridable
@@ -2090,6 +2091,7 @@ src:
   end
 ---
 name:stdTemp
+deprecated
 func
 nodoc
 overridable
