@@ -11,7 +11,7 @@ Please read the [change log]`https://github.com/NatLabRockies/psychrometricsExt/
 on GitHub!**
 
 Usage Notes [#usage]
-====================
+********************
 
 - The `psychSolver()` function is a flexible "one stop shop" for calculating
   most pyschrometric properties supported by this extension. (Thank you to
@@ -24,7 +24,7 @@ Usage Notes [#usage]
   humidity but differ in their required inputs.
   
 Units [#units]
-==============
+**************
 
 - Function inputs may be in any valid units for the input quantity (as defined
   by the Haystack units database). Inputs are converted to standard SI units
