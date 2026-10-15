@@ -260,7 +260,7 @@ func
 overridable
 psychrometrics
 src:
-  (tDB, w, p:standardPressure(0m)) => do
+  (tDB, w, p:standardPressure()) => do
     // Convert to SI units
     if (w.unit == "gH₂O/kgAir") do
       w = (w / 1000).as(1)
@@ -854,7 +854,7 @@ func
 overridable
 psychrometrics
 src:
-  (tDB, tWB, p:standardPressure(0m)) => do
+  (tDB, tWB, p:standardPressure()) => do
     // Convert to SI units
     tDB = tDB.to(1°C)
     tWB = tWB.to(1°C)
@@ -978,7 +978,7 @@ func
 overridable
 psychrometrics
 src:
-  (tDB, w, p:standardPressure(0m)) => do
+  (tDB, w, p:standardPressure()) => do
     // Convert to SI units
     if (w.unit == "gH₂O/kgAir") do
       w = (w / 1000).as(1)
@@ -1193,7 +1193,7 @@ func
 overridable
 psychrometrics
 src:
-  (tDB, w, p:standardPressure(0m)) => do
+  (tDB, w, p:standardPressure()) => do
     // Convert to SI units
     tK: tDB.to(1K)
     if (w.unit == "gH₂O/kgAir") do
@@ -1359,6 +1359,9 @@ src:
     
     // T/F options
     opts = opts.set("debug", opts.has("debug") and opts->debug != false) // Currently unused
+    
+    // Missing pressure?
+    if (p == null) p = standardPressure()
     
     // Output states
     outputStates: ["tDB", "tWB", "tDP", "rh", "w", "h", "rho", "pW", "p"]
@@ -2255,7 +2258,7 @@ func
 overridable
 psychrometrics
 src:
-  (tDB, rh, p:standardPressure(0m), opts:{}) => do
+  (tDB, rh, p:standardPressure(), opts:{}) => do
   
     ///////////
     // Setup //
