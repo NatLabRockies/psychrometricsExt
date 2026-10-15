@@ -1,7 +1,7 @@
 # Changelog
 
-This file tracks notable changes to **psychrometricsExt**. The format is based on
-[Keep a Changelog], and this project adheres to [Semantic Versioning].
+This file tracks notable changes to **psychrometricsExt**. The format is based
+on [Keep a Changelog], and this project adheres to [Semantic Versioning].
 
 [Keep a Changelog]: https://keepachangelog.com/ "Keep a Changelog"
 [Semantic Versioning]: https://semver.org/ "Semantic Versioning"
@@ -9,6 +9,12 @@ This file tracks notable changes to **psychrometricsExt**. The format is based o
 ## Unreleased
 
 [View Changes](https://github.com/NREL/psychrometricsExt/compare/main...develop)
+
+## [v2.0.0-beta] (2026-10-15)
+
+[v2.0.0-beta]: https://github.com/NatLabRockies/psychrometricsExt/releases/tag/v2.0.0-beta
+
+[View Changes](https://github.com/NatLabRockies/psychrometricsExt/compare/v1.4.2...v2.0.0-beta)
 
 *This is the first version to strictly follow the semantic versioning rules.*
 

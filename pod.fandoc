@@ -6,9 +6,9 @@ The Pyschrometrics extension provides a set of functions for basic
 calculations implemented in Axon. Credit goes to Eric Kozubal for providing the
 Microsoft Excel VBA macros originally used to create this extension.
 
-For a change log, see the
-[psychrometricsExt]`https://github.com/NatLabRockies/psychrometricsExt`
-repository on GitHub.
+**Version 2.0.0 contains breaking changes compared to version 1.x releases.
+Please read the [change log]`https://github.com/NatLabRockies/psychrometricsExt/CHANGELOG.md`
+on GitHub!**
 
 Usage Notes
 ===========
