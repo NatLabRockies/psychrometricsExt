@@ -2,13 +2,13 @@ psychrometricsExt
 =================
 
 **psychrometricsExt** is a [SkySpark] extension that provides a set of of [psychrometric] functions.
-The functions were ported to SkySpark by [Stephen Frank] from Excel VBA macros originally written
-by [Eric Kozubal].
+The functions were originally ported to SkySpark by [Stephen Frank] from Excel VBA macros
+written by [Eric Kozubal].
 
 [SkySpark]: http://skyfoundry.com/skyspark/ "SkySpark"
 [psychrometric]: http://en.wikipedia.org/wiki/Psychrometrics "Psychrometrics"
-[Stephen Frank]: https://www.nrel.gov/research/stephen-frank.html "Stephen Frank"
-[Eric Kozubal]: https://www.nrel.gov/research/eric-kozubal.html "Eric Kozubal"
+[Stephen Frank]: https://orcid.org/0000-0003-4366-6163 "Stephen Frank"
+[Eric Kozubal]: https://research-hub.nlr.gov/en/persons/eric-kozubal/ "Eric Kozubal"
 
 Build
 -----

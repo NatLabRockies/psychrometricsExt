@@ -1,6 +1,6 @@
 #! /usr/bin/env fan
 
-// Copyright (C) 2021, Alliance for Sustainable Energy, LLC
+// Copyright (C) 2026, Alliance for Energy Innovation, LLC
 // All Rights Reserved
 
 using build
@@ -15,14 +15,14 @@ class Build : BuildPod
   {
     podName = "psychrometricsExt"
     summary = "Psychrometric Axon functions"
-    version = Version("1.4.3")
+    version = Version("2.0.0")
     meta    = [
                 "ext.name":        "psychrometrics",
                 "ext.icon":        "ruler",
-                "org.name":        "NREL",
-                "org.uri":         "http://www.nrel.gov/",
-                "proj.name":       "NREL Psychrometrics Extension",
-                "proj.uri":        "https://github.com/NREL/psychrometricsExt",
+                "org.name":        "NLR",
+                "org.uri":         "http://www.nlr.gov/",
+                "proj.name":       "NLR Psychrometrics Extension",
+                "proj.uri":        "https://github.com/NatLabRockies/psychrometricsExt",
                 "license.name":    "BSD-3",
                 "skyspark.docExt": "true",
                 ]
