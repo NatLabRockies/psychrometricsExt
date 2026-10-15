@@ -39,6 +39,7 @@ This file tracks notable changes to **psychrometricsExt**. The format is based o
 
 ### Changed
 
+- Most functions are now 'overridable'
 - Reformulated many functions to reduce duplicated math by calling each other
 - Renamed/renumbered several functions to reflect calculation order. **These are
   breaking changes.** Check the function signatures for which functions accept
