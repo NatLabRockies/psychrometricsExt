@@ -1901,16 +1901,27 @@ src:
 ---
 name:specificEnthalpyUnitConvert
 doc:
-  Converts a specific enthalpy 'val' to the given 'outputUnit'.
+  Converts a specific enthalpy 'val' to the given 'outputUnit', automatically applying the specific enthalpy offset between SI and IP units.
+  
+  SI vs. IP Enthalpy
+  ------------------
   
   In HVAC calculations, specific enthalpy has an arbitrary zero point. In SI units, the zero point is 0°C; in IP units it is 0°F. The offset between the IP and SI quantities for enthalpy is equal to the SI specific enthalpy evaluated at 0°F (-17.7778°C):
   
   - Per the *2025 ASHRAE Handbook: Fundamentals*, the specific enthalpy of dry air at -17°C is -17.095 kJ/kg and at -18°C is -18.1 kJ/kg
-  - Interpolating between the two values, the estimated offset at -17.7778°C is -17.876689 kJ/kg
+  - Interpolating between the two values, the approximate offset at -17.7778°C is -17.876689 kJ/kg
   
-  This function applies the offset automatically, in the correct direction, when converting between SI and IP units of specific enthalpy.
+  This function applies the SI/IP offset automatically, in the correct direction, when converting between SI and IP units of specific enthalpy.
   
-  *Note: there is a proposal to update the Haystack unit database to handle this offset within the unit conversion logic. This function will continue to work as expected regardless of future changes to the Haystack unit database.*
+  Guidance
+  --------
+  
+  The SI/IP offset *should not* be applied to an enthalpy *difference*. For this reason, the Project Haystack's unit database and the SkySpark unit conversion engine do *not* apply the SI/IP offset automatically. (See [this Project Haystack forum thread]`https://project-haystack.org/forum/topic/1196` for details.)
+  
+  When converting specific enthalpy between SI and IP units:
+  
+  - If 'val' is total specific enthalpy, use this function
+  - If 'val' is specific enthalpy difference, use `to()`
 func
 psychrometrics
 src:

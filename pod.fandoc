@@ -32,3 +32,9 @@ Units
 - With the exception of `psychSolver()`, function outputs are always in standard
   SI units. (`psychSolver()` allows the user to specify either SI or IP units
   via the 'outputUnits' option.)
+- The zero reference point for specific enthalpy differs between the SI and IP
+  unit systems. The `specificEnthalpyUnitConvert()` converts between SI and IP
+  units of specific enthalpy, automatically applying the SI/IP enthalpy offset.
+  This function should only be used to convert total specific enthalpy, not
+  specific enthalpy difference. For details and guidance, see the
+  `specificEnthalpyUnitConvert()` function documentation.
