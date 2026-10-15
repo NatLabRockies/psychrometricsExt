@@ -10,8 +10,8 @@ Microsoft Excel VBA macros originally used to create this extension.
 Please read the [change log]`https://github.com/NatLabRockies/psychrometricsExt/CHANGELOG.md`
 on GitHub!**
 
-Usage Notes
-===========
+Usage Notes [#usage]
+====================
 
 - The `psychSolver()` function is a flexible "one stop shop" for calculating
   most pyschrometric properties supported by this extension. (Thank you to
@@ -23,8 +23,8 @@ Usage Notes
   `relativeHumidity2()`, and `relativeHumidity3()` all calculate relative
   humidity but differ in their required inputs.
   
-Units
-=====
+Units [#units]
+==============
 
 - Function inputs may be in any valid units for the input quantity (as defined
   by the Haystack units database). Inputs are converted to standard SI units

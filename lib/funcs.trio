@@ -347,7 +347,7 @@ src:
 ---
 name:dryAirSpecificHeat
 doc:
-  Returns the specific heat capacity of dry air using a lookup from Table 2 in the *2025 ASHRAE Handbook: Fundamentals*, SI Edition.
+  Computes the specific heat capacity of dry air given temperature. Uses a lookup from Table 2 in the *2025 ASHRAE Handbook: Fundamentals*, SI Edition.
   
   Inputs
   ------
@@ -1077,7 +1077,7 @@ src:
 ---
 name:moistAirSpecificHeat
 doc:
-  Returns the specific heat capacity of moist air using a weighted average of the specific heat capacities of the dry air and water vapor components of the air-water mixture.
+  Computes the specific heat capacity of moist air given dry-bulb temperature. Uses a weighted average of the specific heat capacities of the dry air and water vapor components of the air-water mixture.
   
   Inputs
   ------
@@ -1706,7 +1706,7 @@ src:
 ---
 name:saturatedWaterVaporSpecificHeat
 doc:
-  Returns the specific heat capacity of saturated water vapor using a lookup from Table 3 in the *2025 ASHRAE Handbook: Fundamentals*, SI Edition.
+  Computes the specific heat capacity of saturated water vapor given temperature. Uses a lookup from Table 3 in the *2025 ASHRAE Handbook: Fundamentals*, SI Edition.
   
   Inputs
   ------
