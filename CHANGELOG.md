@@ -41,19 +41,22 @@ This file tracks notable changes to **psychrometricsExt**. The format is based o
 
 - Most functions are now 'overridable'
 - Reformulated many functions to reduce duplicated math by calling each other
-- Renamed/renumbered several functions to reflect calculation order. **These are
-  breaking changes.** Check the function signatures for which functions accept
-  which input states.
+- **BREAKING:** Renamed/renumbered several functions to reflect calculation
+  order. Check the function signatures and documentation for which functions
+  accept which input states.
   - Version 1.x `dewPoint()` became `dewPoint2()`
   - Version 1.x `humidityRatio()` became `humidityRatio3()`
   - Version 1.x `relativeHumidity()` became `relativeHumidity3()`
-- Renamed `moistAirEnthalpy()` to `moistAirSpecificEnthalpy()` (which more
-  precisely describes what it calculates)
-- Renamed `stdPressure()` to `standardPressure()`
-- Renamed `stdTemp()` to `standardTemp()`
+- **BREAKING:** Renamed `moistAirEnthalpy()` to `moistAirSpecificEnthalpy()`
+  (which more precisely describes what it calculates)
+- **BREAKING:** Renamed `stdPressure()` to `standardPressure()`
+- **BREAKING:** Renamed `stdTemp()` to `standardTemp()`
+- Updated organization names and links:
+  - The "National Renewable Energy Laboratory" (NREL) is now the "National
+    Laboratory of the Rockies" (NLR)
+  - The "Alliance for Sustainable Energy" is now the "Alliance for Energy
+    Innovation"
 - Updated documentation throughout
-- The "Alliance for Sustainable Energy" is now the "Alliance for Energy
-  Innovation"
 
 ### Deprecated
 
