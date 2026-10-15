@@ -15,7 +15,7 @@ class Build : BuildPod
   {
     podName = "psychrometricsExt"
     summary = "Psychrometric Axon functions"
-    version = Version("2.0.0-beta")
+    version = Version("2.0.0")
     meta    = [
                 "ext.name":        "psychrometrics",
                 "ext.icon":        "ruler",
